@@ -3,91 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Thaiger H₂ · Lap Coach v2</title>
-<!-- ══════════════════════════════════════════════════════════════════════
-  THAIGER LAP COACH v2
-  ══════════════════════════════════════════════════════════════════════
-
-  WHAT THIS FILE IS
-  ─────────────────
-  A complete race-strategy dashboard for Shell Eco-marathon (SEM) Poland
-  2026. It runs entirely in a web browser — no server, no install. Just
-  double-click the file. It supports two modes:
-
-    DEMO MODE  (default, starts automatically)
-      A synthetic car drives the Silesia Ring circuit using the physics
-      model and the dynamic-programming optimizer. All panels update in
-      real time. Use DEMO for screenshots and demonstrations.
-
-    LIVE MQTT MODE
-      Subscribes to your real HiveMQ broker. Receives the exact same
-      JSON frames the Android cockpit app already publishes. The render
-      paths are shared — switching modes is instant.
-
-  HOW IT FITS THE AWARD PAPER (Art. 247)
-  ───────────────────────────────────────
-  § 1 Data strategy  → the 21-channel Data Dictionary panel (right col)
-                       shows every captured parameter and its goal
-  § 2 Telemetry      → LIVE MQTT mode is the system; settings panel
-                       connects to the same HiveMQ broker
-  § 3 Knowledge      → Fitted Model panel shows CdA/Crr convergence per
-                       lap (the system-ID learning loop in action)
-  § 4 Race strategy  → the DP optimizer, plan strip, attempt engine
-  § 5 Driver perf.   → NEXT ACTION card, speed band, 10-s debrief
-  § 6 Results        → attempt km/m³ efficiency vs plan comparison
-
-  MQTT DATA CONTRACT (from ThaiGerTrackControl repo)
-  ──────────────────────────────────────────────────
-  Telemetry topic:  thaiger/<carId>/telemetry  (5 Hz, JSON)
-    Fields A–U (21 channels): A=speed, B=avgSpeed, C=lapCount,
-    D=totalTime, E=targetLapTime, F=optimalSpeed, G=fcVoltage,
-    H=supercapVoltage, I=motorVoltage, J=fcCurrent, K=supercapCurrent,
-    L=motorCurrent, M=ownConsumption, N=fcTemp, O=airPumpDuty,
-    P=drivingHint(0-100), Q=cellVoltageDiff, R=fcEnergy(Ws),
-    S=motorEnergy(Ws), T=fcEfficiency(%), U=systemEfficiency(%)
-
-  Strategy topic:   thaiger/<carId>/strategy  (retained, QoS 1, JSON)
-    Published by the strategy engine after each lap. Format:
-    { planVersion, lapTimeTargetSec, energyBudgetWh, weather,
-      segments: [{s0,s1,action,vMin,vMax,fcSetW}] }
-    The dashboard subscribes and renders this plan automatically.
-
-  EXPECTED DEMO NUMBERS (verify optimizer is working)
-  ────────────────────────────────────────────────────
-    Plan lap time:    ~177 s (2:57)  — target is 186 s
-    Plan H₂ energy:   ~6.5 Wh/lap
-    Plan efficiency:  ~600–620 km/m³
-    Burn fraction:    ~25 % of lap distance
-    Model error lap1: ~15–20 %      → lap 5+: ~4 %
-    Attempt (11 laps): ~32:30 / 35:00 budget
-
-  6 REPLACE-ME MARKERS — summary
-  ────────────────────────────────
-  (track)   Swap synthetic 7-turn geometry with surveyed Silesia Ring
-  (vehicle) Replace exemplary CdA/Crr/etc. with coast-down fit results
-  (weather) Replace random walk with Open-Meteo API fetch
-  (fit)     Replace demo convergence with real least-squares regression
-  (live)    Nothing to do — LIVE mode is wired; just enter credentials
-  (ai)      Point Settings→AI endpoint at your Flask proxy server
-
-  TAKING SCREENSHOTS FOR THE PAPER
-  ──────────────────────────────────
-  1. Open in Chrome/Firefox, wait ~3 laps for data to appear
-  2. Use browser fullscreen (F11) for a clean capture
-  3. Label all screenshots: "DEMO mode — exemplary / simulation data"
-  4. Best panels: NEXT ACTION + speed band, track SVG, plan-vs-actual
-     chart, attempt summary row, Fitted Model convergence
-
-  RELATED FILES
-  ─────────────
-  SEM-Poland-2026_DataTelemetry_APPLICATION-FINAL.tex   Award paper
-  ThaiGer_SEM2026_Finalization_Guide.md                 Step-by-step guide
-  github.com/D0mm3c/ThaiGerTrackControl                 The real telemetry repo
-    └─ engineer_dashboard.html                          Existing pit dashboard
-                                                        (same MQTT, same keys)
-══════════════════════════════════════════════════════════════════════ -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<title>ThaiGer · Lap Coach</title>
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com;
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com;
+  font-src https://fonts.gstatic.com;
+  connect-src https://api.open-meteo.com wss: ws: http://localhost:* https://localhost:*;
+  img-src 'self' data:;">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"
+  integrity="sha384-ZFaJg22VvVm4+3ZqY9eRIHGmqdEQb+c7XO+0IKspqdtPGFu6xRiPnK8xeNA//kQJ"
+  crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"
+  integrity="sha384-bs/nf9FbdNouRbMiFcrcZfLXYPKiPaGVGplVbv7dLGECccEXDW+S3zjqSKR5ZEaD"
+  crossorigin="anonymous"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Space+Grotesk:wght@400;500;600&display=swap');
   :root{
@@ -133,6 +62,7 @@
   #cue-card{background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:12px;text-align:center}
   #cue-act{font-family:var(--mono);font-weight:700;font-size:34px;line-height:1}
   #cue-act.burn{color:var(--green)} #cue-act.coast{color:var(--amber)} #cue-act.hold{color:var(--blue)}
+  #cue-act.stop{color:var(--red)} #cue-act.launch{color:var(--green)}
   #cue-sub{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:6px}
   #spd{font-family:var(--mono);font-weight:700;font-size:50px;line-height:1}
   #spd.lo{color:var(--amber)} #spd.hi{color:var(--red)} #spd.ok{color:var(--green)}
@@ -224,7 +154,7 @@
 <div id="app">
   <!-- ═══════════════════════ TOPBAR ═══════════════════════ -->
   <div id="topbar">
-    <div id="logo">THAIGER <span>H₂</span> · LAP COACH <span style="color:var(--faint);font-size:10px">v2</span></div>
+    <div id="logo">ThaiGer <span>H₂</span> · Lap Coach</div>
     <div class="tb-sep"></div>
     <button class="pill demo active" id="m-demo" onclick="setMode('demo')">DEMO DATA</button>
     <button class="pill" id="m-live" onclick="setMode('live')">LIVE MQTT</button>
@@ -284,9 +214,10 @@
       <div class="blk">
         <div class="lbl">Active Profile</div>
         <div class="kv"><span class="k">Car</span><span class="v" id="prof-name">THAIGER 7</span></div>
-        <div class="kv"><span class="k">Category</span><span class="v" id="prof-cat">Prototype</span></div>
+        <div class="kv"><span class="k">Category</span><span class="v" id="prof-cat">Prototype · H₂</span></div>
         <div class="kv"><span class="k">FC alarm</span><span class="v" id="prof-fc">70 °C</span></div>
         <div class="kv"><span class="k">Min mass</span><span class="v" id="prof-m">95 kg total</span></div>
+        <div class="kv"><span class="k">Lap stop</span><span class="v" id="prof-stop" style="color:var(--faint)">No stop (Prototype)</span></div>
       </div>
     </div>
 
@@ -352,14 +283,16 @@
         <div class="kv"><span class="k">Energy pred. err.</span><span class="v" id="m-err">—</span></div>
         <div style="height:6px"></div>
         <div class="lbl" style="margin-bottom:3px">Convergence — CdA estimate vs true</div>
-        <canvas class="cv" id="cvFit" style="height:55px!important"></canvas>
+        <div style="height:60px;position:relative"><canvas id="cvFit"></canvas></div>
         <div class="note">
           Green = true value · Blue = model estimate converging each lap.<br>
           In LIVE mode, replace the TRUE object with your coast-down fit values.
           <br><br>
-          Rules calibration: 11 laps / 35 min / 14.6 km (Art. 226) · 7-turn (Art. 231) ·
-          6 attempts (Art. 228) · Prototype driver min 50 kg incl. gear (Ch. I).
-          DEMO position/gradient/weather are synthetic.
+          Rules calibration (Poland 2026 Chapter II): 11 laps / 35 min / 14.6 km (Art. 226) ·
+          7-turn circuit (Art. 231) · 6 attempts (Art. 228).
+          <b>Prototype (ThaiGer):</b> no stop, rolling laps, driver ≥ 50 kg incl. gear.
+          <b>Urban Concept (Bengalo):</b> mandatory full stop every lap (Art. 227),
+          launch from rest, driver ≥ 70 kg incl. gear. DEMO weather is real SEM 2025 data.
         </div>
       </div>
 
@@ -369,7 +302,7 @@
           21-Channel Data Dictionary (A–U)
         </div>
         <div class="sec-body" id="dd-body">
-          <div class="note" style="margin-bottom:6px">Live values update from MQTT/demo frames. Sources: TelemetryModel.java, CarProfile.java (ThaiGerTrackControl repo). Alarm thresholds are car-profile dependent.</div>
+          <div class="note" style="margin-bottom:6px">Live values update from MQTT/demo frames. Alarm thresholds are car-profile dependent.</div>
           <table class="dd-table">
             <thead><tr>
               <td class="key">K</td>
@@ -389,9 +322,9 @@
           Integration Guide — Demo → Live
         </div>
         <div class="sec-body" id="ig-body">
-          <div class="note" style="margin-bottom:8px">Connect this dashboard to the real Thaiger 7 in 5 steps. Use the same credentials as <b>engineer_dashboard.html</b> in the ThaiGerTrackControl repo.</div>
+          <div class="note" style="margin-bottom:8px">Connect this dashboard to the real car in 5 steps. Use the same HiveMQ credentials as your existing pit dashboard.</div>
 
-          <div class="step"><div class="step-n">1</div><div class="step-t"><b>Find your HiveMQ credentials</b><br>Check the ThaiGerTrackControl repo README or the Settings in engineer_dashboard.html. You need: broker hostname, port (8884), username, password.</div></div>
+          <div class="step"><div class="step-n">1</div><div class="step-t"><b>Find your HiveMQ credentials</b><br>Check your existing pit dashboard settings. You need: broker hostname, port (8884), username, password.</div></div>
 
           <div class="step"><div class="step-n">2</div><div class="step-t"><b>Enter credentials here</b><br>Click the ⚙ gear icon (top right). Fill in Broker Host, Port=8884, Username, Password. Click SAVE.</div></div>
 
@@ -422,9 +355,8 @@
   <h2>SETTINGS</h2>
 
   <div class="info-box">
-    <b>LIVE MQTT</b> — use the same broker/topic as <b>engineer_dashboard.html</b>
-    in the ThaiGerTrackControl repo (same host, port 8884, same credentials).
-    Topic subscribed: <b>thaiger/&lt;carId&gt;/telemetry</b> + <b>thaiger/&lt;carId&gt;/strategy</b>
+    <b>LIVE MQTT</b> — use the same HiveMQ broker credentials as your existing pit dashboard
+    (port 8884, WSS). The dashboard subscribes to your configured telemetry and strategy topics.
   </div>
 
   <div class="lbl">MQTT Broker (HiveMQ Cloud)</div>
@@ -452,8 +384,7 @@
 
     Quick setup (pit laptop):
       pip install flask flask-cors requests
-      # Create strategist_proxy.py (see ThaiGer_SEM2026_Finalization_Guide.md
-      # Part 3.5 for the full 20-line script)
+      # Create strategist_proxy.py (20-line Flask proxy — see your internal guide)
       export LLM_API_KEY="your-api-key-here"
       python strategist_proxy.py
       # Then enter http://localhost:8787/strategist below
@@ -472,30 +403,86 @@
 <script>
 'use strict';
 
-/* ══════════════════════════════════════════════════════════════════════
-   1 · CAR PROFILES
-   ══════════════════════════════════════════════════════════════════════
-   Source: ThaiGerTrackControl / CarProfile.java, TelemetryModel.java
-   Thaiger 7 and Bengalo are both H₂ prototypes; thresholds differ.    */
+/* ══════════════════════════════════════════════════════════════════
+   1 · CAR PROFILES — built from Poland 2026 Chapter II rules
+   ══════════════════════════════════════════════════════════════════
+
+   THAIGER 7 — Prototype category, H₂ fuel cell
+   ─────────────────────────────────────────────
+   Art. 226: 11 laps / 35 min / 14.6 km. No mandatory stop.
+   Ch. I: driver min 50 kg incl. full gear & comms (ballast if lighter).
+   Strategy: pure burn-and-coast from rolling start each lap.
+
+   BENGALO — Urban Concept category, H₂ fuel cell
+   ─────────────────────────────────────────────────
+   Art. 226: same 11 laps / 35 min / 14.6 km time budget.
+   Art. 227: MANDATORY FULL STOP once per lap at the designated stop
+             line (confirmed on-site). Rolling stop = INVALID ATTEMPT.
+             Stop must be within 3 car-lengths of the stop line.
+   Art. 229c: starts from complete stop (no push, wait for green flag).
+   Ch. I: driver min 70 kg incl. full gear & comms.
+   Enclosed body: larger, heavier vehicle (≥ 1200 mm wide, car-like).
+   Strategy: burn hard from rest → cruise → coast → brake to stop.    */
+
 const PROFILES = {
   thaiger7: {
-    name:'THAIGER 7', category:'Prototype', color:'#3D6FFF',
-    fcTempAlarm:70,       // °C — red alarm (Thaiger 7 spec)
-    cellDiffAlarm:50,     // mV — red alarm
-    minSpeedAlarm:25,     // km/h — amber (Art. 226 validity floor)
-    mass:{ car:45, driverMin:50 },  // kg (ballast if driver < 50 kg)
-    mqttCar:'thaiger7'
+    name:'THAIGER 7', category:'Prototype · H₂', color:'#3D6FFF',
+    fcTempAlarm:70, cellDiffAlarm:50, minSpeedAlarm:25,
+    // Ch. I: vehicle + driver minimum (50 kg driver incl. gear)
+    mass:{ car:45, driverMin:50 },   // total ≈ 95 kg
+    mqttCar:'thaiger7',
+    // Art. 227: Prototype does NOT have the compulsory-stop rule
+    stopPerLap: false,
+    stopTimeSec: 0,
+    // Vehicle physics (Prototype: aerodynamic shell, low drag)
+    physics:{
+      CdA:0.045,      // m² — small aerodynamic shell (exemplary)
+      Crr:0.0025,     // rolling resistance (lightweight prototype)
+      etaDrive:0.87,  // drivetrain efficiency
+      Popt:160,       // W — FC power at peak efficiency
+      etaMax:0.40     // peak H₂→wheel system efficiency
+    },
+    // FC burn set-points: gentle eco burn, no launch boost (rolling laps)
+    pCruise:235, pLaunch:235,
+    // DP lap-time target (s): plan to 178 s → banks margin under the 35-min cap
+    lapTimeTarget: 178,
+    // Initial speed for DP forward pass: rolling start from prev lap
+    startSpeedMS: 27/3.6
   },
   bengalo: {
     name:'BENGALO', category:'Urban Concept · H₂', color:'#9B6BFF',
-    fcTempAlarm:65,       // °C — different spec from Bengalo README
-    cellDiffAlarm:50,
-    minSpeedAlarm:25,
-    mass:{ car:42, driverMin:50 },
-    mqttCar:'bengalo'
+    fcTempAlarm:65, cellDiffAlarm:50, minSpeedAlarm:25,
+    // Ch. I: vehicle + driver minimum (70 kg driver incl. gear, Urban Concept)
+    mass:{ car:70, driverMin:70 },   // total ≈ 140 kg
+    mqttCar:'bengalo',
+    // Art. 227: Urban Concept — FULL STOP required every lap
+    stopPerLap: true,
+    stopTimeSec: 5,        // mandatory hold at the stop line (marshal verifies)
+    stopZoneFrac: 1.0,     // stop line at the lap end → full 1327 m counted
+    brakingDistM: 55,      // metres to decelerate from cruise to a full stop
+    // Vehicle physics (Urban Concept: enclosed eco body, optimised but
+    // larger & heavier than a Prototype — exemplary values)
+    physics:{
+      CdA:0.15,       // m² — enclosed eco shell, larger frontal area
+      Crr:0.0038,     // higher (heavier vehicle on road-legal tires)
+      etaDrive:0.83,  // drivetrain efficiency (heavier drivetrain)
+      Popt:380,       // W — FC power at peak efficiency (stronger powertrain)
+      etaMax:0.38     // peak system efficiency
+    },
+    // FC burn set-points: stronger cruise + launch boost to recover the
+    // pace lost to the mandatory stop each lap (Art. 227).
+    pCruise:460, pLaunch:820,
+    // DP lap-time target leaves room for the per-lap stop cycle so the
+    // full 11-lap attempt still fits the 35-min budget (Art. 226).
+    lapTimeTarget: 162,
+    // Initial speed for DP forward pass: starts from REST after stop (Art. 227)
+    startSpeedMS: 0
   }
 };
 let activeProfile = PROFILES.thaiger7;
+
+/* Active physics objects — swapped by switchCar() */
+let lapTimeTarget = PROFILES.thaiger7.lapTimeTarget;
 
 function switchCar(key){
   activeProfile = PROFILES[key];
@@ -504,23 +491,57 @@ function switchCar(key){
   document.getElementById('prof-name').textContent = activeProfile.name;
   document.getElementById('prof-cat').textContent  = activeProfile.category;
   document.getElementById('prof-fc').textContent   = activeProfile.fcTempAlarm + ' °C';
-  document.getElementById('prof-m').textContent    = (activeProfile.mass.car + activeProfile.mass.driverMin) + ' kg min';
-  EST.m = TRUE.m = activeProfile.mass.car + activeProfile.mass.driverMin;
-  // Replan with new mass
+  const totalKg = activeProfile.mass.car + activeProfile.mass.driverMin;
+  document.getElementById('prof-m').textContent   = totalKg + ' kg min';
+
+  // Show / hide stop rule indicator in profile card
+  const stopEl = document.getElementById('prof-stop');
+  if(stopEl){
+    stopEl.textContent = activeProfile.stopPerLap
+      ? `STOP / LAP (Art. 227)` : `No stop (Prototype)`;
+    stopEl.style.color = activeProfile.stopPerLap ? 'var(--amber)' : 'var(--faint)';
+  }
+
+  // Update vehicle physics
+  const ph = activeProfile.physics;
+  TRUE.m = totalKg; TRUE.CdA = ph.CdA; TRUE.Crr = ph.Crr;
+  TRUE.etaDrive = ph.etaDrive; TRUE.Popt = ph.Popt; TRUE.etaMax = ph.etaMax;
+  EST.m  = totalKg; EST.CdA  = ph.CdA * 1.26; EST.Crr = ph.Crr * 1.30;
+  EST.etaDrive = ph.etaDrive; EST.Popt = ph.Popt; EST.etaMax = ph.etaMax * 0.94;
+
+  // Update lap-time target used by the optimizer
+  lapTimeTarget = activeProfile.lapTimeTarget;
+
+  // Switching vehicle starts a fresh run (different category = new attempt)
+  state.lap=1; state.s=0; state.v=activeProfile.startSpeedMS;
+  state.t=0; state.eH2=0; state.eFC=0; state.R=0; state.S=0; state.fcT=38;
+  state.attempt=1; state.attemptT=0; state.attemptE=0;
+  state.laps=[]; state.attempts=[]; state.lapLog=[]; state.prevLog=null;
+  state.stopPhase=null; state.stopTimer=0; state.alerts=[];
+  fitHistory.est=[]; fitHistory.true_=[]; fitHistory.labels=[];
+
   state.plan = optimise(EST, WX);
   renderPlanChart(); renderStrip(); renderTrack();
+  renderLaps(); renderModel(); renderFitChart(); renderAttemptHistory();
+  document.getElementById('alerts').innerHTML='';
 }
 
-/* ══════════════════════════════════════════════════════════════════════
-   2 · OFFICIAL RACE RULES (Poland 2026, Chapter II)
-   ══════════════════════════════════════════════════════════════════════
-   Art. 226 — valid attempt = 11 laps, max 35 min, total 14.6 km
-              → 1 lap = 1327 m, required avg ≥ 25.03 km/h
-   Art. 228 — max 6 attempts, best result counts
-   Art. 231 — 7-turn circuit (real coordinates from SEM portal)        */
+/* 2 · OFFICIAL RACE RULES (Poland 2026, Chapter II — extracted from PDF)
+   Art. 225: Mileage Challenge = highest efficiency in category & class.
+   Art. 226: Valid attempt = 11 CONSECUTIVE laps, MAX 35 min, 14.6 km.
+             Time requirement identical for Prototype and Urban Concept.
+             → 1 lap = 1327.27 m, required average ≥ 25.03 km/h.
+   Art. 227: Urban Concept ONLY — full stop once per lap at designated
+             location. Rolling stop = INVALID attempt (verified by marshal).
+   Art. 228: Max 6 attempts. Best result counts.
+   Art. 229: Start from COMPLETE STOP. No push. Green flag to enter track.
+   Art. 231: 7-turn circuit. Coordinates on SEM Data & Telemetry Portal.
+   Art. 236: Communication via PANEL BOARDS ONLY in panelling area.
+             No radio/data-link to vehicle during scored attempts.
+   Ch. I:   Prototype driver min 50 kg incl. gear. Urban Concept: 70 kg. */
 const LAPS_PER_ATTEMPT = 11, ATTEMPT_MAX_S = 35*60,
       ATTEMPT_DIST_KM = 14.6, MAX_ATTEMPTS = 6,
-      OFFICIAL_LAP_M = 14600/11;                    // = 1327.27 m
+      OFFICIAL_LAP_M = 14600/11;          // 1327.27 m/lap
 
 /* ══════════════════════════════════════════════════════════════════════
    3 · SILESIA RING — REAL GPS TRACK (Art. 231)
@@ -635,38 +656,16 @@ const LAP_LEN = OFFICIAL_LAP_M;  // exact: 14600/11 = 1327.27 m (Art. 226)
 const CORNER_LABELS = ['T1','T2','T3','T4','T5','T6','T7'];
 const CORNER_S_FRAC  = [0.109, 0.318, 0.345, 0.518, 0.645, 0.782, 0.873];
 
-/* ══════════════════════════════════════════════════════════════════════
-   4 · VEHICLE MODEL
-   ══════════════════════════════════════════════════════════════════════
-   REPLACE-ME(vehicle):
-   ──────────────────────
-   What to do: Replace the TRUE object with your coast-down fit results,
-   and set EST to slightly off (the model starts uncertain and learns).
-
-   How to measure — coast-down test (30 min, flat straight):
-   1. Accelerate to ~35 km/h on the fuel cell
-   2. Cut power (FC off, motor off). Log channel A (speed) at 5 Hz.
-   3. Repeat 3 times. Average.
-   4. Fit: m·dv/dt = -(C0 + C2·v²) by least squares
-      → Crr = C0 / (m·9.81)
-      → CdA = 2·C2 / rho  (rho ≈ 1.225 kg/m³ or use pressure/temperature)
-   5. Get η_sys(P) from logged G·J (power) vs. T (efficiency) over several laps
-   6. Paste the 5 numbers into TRUE below. Reset EST to start ~20% off.
-
-   Physics (Eq. 1 in the award paper):
-     m·v·dv/ds = F_t − ½ρ·CdA·(v+w∥)² − m·g·Crr·cosθ − m·g·sinθ  */
-const TRUE = {
-  m:95,          // kg — vehicle 45 + driver 50 (Ch. I minimum, ballast if lighter)
-  CdA:0.042,     // m² — aerodynamic drag area (exemplary; measure by coast-down)
-  Crr:0.0024,    // — rolling resistance coefficient (exemplary; measure by coast-down)
-  etaDrive:0.88, // — drivetrain efficiency motor→wheel (exemplary)
-  Popt:150,      // W — FC power at η_sys peak (exemplary)
-  etaMax:0.41    // — peak FC system efficiency (exemplary; 41% at 150 W)
-};
-let EST = {      // Model starts with wrong parameters; learns over laps
-  m:95, CdA:0.058, Crr:0.0032, etaDrive:0.88, Popt:150, etaMax:0.38
-};
-const G=9.81, LHV_WH_PER_L=3.0;   // H₂ LHV ≈ 3.0 Wh/Nl (= 10.8 MJ/m³)
+/* 4 · VEHICLE MODEL
+   TRUE = the "hidden" target model the demo car drives at.
+   EST  = the optimizer's current estimate, starts ~30–40% off and
+          converges through the coast-down identification each lap.
+   Both are seeded from the active profile's physics block in switchCar().
+   REPLACE-ME(vehicle): paste your coast-down fit values into the profile
+   physics blocks above; switchCar() propagates them here automatically.  */
+const TRUE = { m:95,  CdA:0.045, Crr:0.0025, etaDrive:0.87, Popt:160, etaMax:0.40 };
+let   EST  = { m:95,  CdA:0.062, Crr:0.0035, etaDrive:0.87, Popt:160, etaMax:0.37 };
+const G=9.81, LHV_WH_PER_L=3.0;   // H₂ LHV ≈ 3.0 Wh/Nl
 /* Air density from real pressure (hPa) + temperature °C: ρ = p/(R·T)
    Uses actual Open-Meteo surface pressure when available, else std atm. */
 const rho = t => {
@@ -836,28 +835,24 @@ function wxStep(){
   renderWx();
 }
 
-/* ══════════════════════════════════════════════════════════════════════
-   6 · STRATEGY ENGINE — Dynamic Programming Optimizer
-   ══════════════════════════════════════════════════════════════════════
-   Energy-optimal burn/coast plan.
-   State = speed (real version also includes supercap SoC — add as a
-   second state dimension once the supercap is characterised).
-   Bellman backward pass over distance steps; λ·time penalty;
-   bisection on λ to meet the lap-time target.
-
-   Theory: optimal eco-driving has bang–singular–bang structure (burn at
-   max-efficiency setpoint / coast / occasional steady-speed); DP gives
-   the global optimum on the discretised state space. Refs [3–6] in the
-   award paper. Solve time < 1 second → re-plan after every lap.          */
-const DS = 12;                              // m per DP step
+/* 6 · STRATEGY ENGINE
+   Lap time target is profile-dependent (set by switchCar):
+   • ThaiGer  (Prototype):      lapTimeTarget = 186 s
+     → no stop overhead, pure driving budget.
+   • Bengalo  (Urban Concept):  lapTimeTarget = 166 s
+     → budget = 190.9 s − stop cycle overhead (~25 s: decel+hold+accel)
+     → DP plans driving phase only; stop time is added in simulation.
+   Both run the same DP algorithm; Bengalo also uses startSpeedMS = 0.  */
+const DS = 12;
 const NSTEP = Math.floor(LAP_LEN/DS);
 const VGRID = [];
 for(let v=V_MIN; v<=V_MAX+1e-9; v+=0.5/3.6) VGRID.push(v);
-const P_SET = 200;                          // W — FC set-point when burning
-
-/* Target 186 s/lap → ≈ 25.7 km/h average → banks +54 s / attempt
-   (35:00 budget / 11 laps = 190.9 s/lap allowed; we plan to 186 s)  */
-const LAP_T_TARGET = 186;
+/* Burn set-points are profile-specific (activeProfile.pCruise / pLaunch).
+   Urban Concept uses a higher launch burst for the first LAUNCH_DIST m to
+   recover pace after its mandatory stop; Prototype uses one gentle burn.  */
+const LAUNCH_DIST = 90;   // m — launch-burst zone after an Urban Concept stop
+const pCruise = () => activeProfile.pCruise;
+const pLaunch = () => activeProfile.pLaunch;
 
 function ptAt(s){
   s = ((s%LAP_LEN)+LAP_LEN)%LAP_LEN;
@@ -870,7 +865,10 @@ function stepDyn(v, P, pt, M, wx){
   const Fa = 0.5*rho(wx.tempC)*M.CdA*Math.max(0,v+w)**2;
   const th = Math.atan((pt.grade||0)/100);
   const Fr = M.m*G*M.Crr*Math.cos(th) + M.m*G*Math.sin(th);
-  const Ft = P>0 ? Math.min((P*M.etaDrive)/Math.max(v,1), 45) : 0;
+  /* Traction force capped at a grip-limited max acceleration (≈1.3 m/s²).
+     Mass-proportional so the heavier Urban Concept can launch from rest. */
+  const Fcap = M.m * 1.3;
+  const Ft = P>0 ? Math.min((P*M.etaDrive)/Math.max(v,1), Fcap) : 0;
   const a  = (Ft - Fa - Fr)/M.m;
   const v2 = Math.max(0.1, Math.sqrt(Math.max(0.01, v*v + 2*a*DS)));
   const dt = 2*DS/(v+v2);
@@ -888,42 +886,49 @@ function nearestV(v){
 function solveDP(lambda, M, wx){
   const N=VGRID.length, INF=1e15;
   let J=new Float64Array(N);
-  const act=[];
+  const act=[], usedP=[];
+  const isUC = activeProfile.stopPerLap;
+
   for(let k=NSTEP-1;k>=0;k--){
     const pt=ptAt(k*DS), cap=vCap(pt,wx);
-    const Jn=new Float64Array(N).fill(INF), An=new Uint8Array(N);
+    const Jn=new Float64Array(N).fill(INF), An=new Uint8Array(N), Pn=new Uint8Array(N);
+    const P_s = isUC && k*DS < LAUNCH_DIST ? pLaunch() : pCruise();
     for(let i=0;i<N;i++){
       const v=VGRID[i]; if(v>cap+1e-6){Jn[i]=INF;continue;}
       for(const burn of [1,0]){
-        const r=stepDyn(v, burn?P_SET:0, pt, M, wx);
+        const r=stepDyn(v, burn?P_s:0, pt, M, wx);
         if(r.v2<V_MIN-0.6) continue;
         const j=nearestV(Math.min(r.v2,cap));
         const c=r.eH2 + lambda*r.dt + (J[j]>=INF?INF:J[j]);
-        if(c<Jn[i]){Jn[i]=c; An[i]=burn;}
+        if(c<Jn[i]){Jn[i]=c; An[i]=burn; Pn[i]=P_s;}
       }
     }
-    J=Jn; act.unshift(An);
+    J=Jn; act.unshift(An); usedP.unshift(Pn);
   }
-  let v=27/3.6, t=0, e=0; const plan=[];
+  /* Forward pass — Urban Concept starts from rest after stop (Art. 227) */
+  let v = isUC ? 0.1 : 27/3.6, t=0, e=0;
+  const plan=[];
   for(let k=0;k<NSTEP;k++){
     const pt=ptAt(k*DS), cap=vCap(pt,wx);
+    const P_s = isUC && k*DS < LAUNCH_DIST ? pLaunch() : pCruise();
     v=Math.min(v,cap);
-    const burn = (v<=V_MIN+0.3) ? 1 : act[k][nearestV(v)];
-    const r=stepDyn(v, burn?P_SET:0, pt, M, wx);
-    plan.push({s:k*DS, burn:!!burn, vT:v*3.6, cap:cap*3.6});
+    /* Near V_MIN or in launch zone: always burn */
+    const burn = (v<=V_MIN+0.3 || (isUC && k*DS < LAUNCH_DIST)) ? 1 : act[k][nearestV(v)];
+    const r=stepDyn(v, burn?P_s:0, pt, M, wx);
+    plan.push({s:k*DS, burn:!!burn, vT:v*3.6, cap:cap*3.6,
+               launch: isUC && k*DS < LAUNCH_DIST});
     v=Math.min(r.v2,cap); t+=r.dt; e+=r.eH2;
   }
   return {plan, lapT:t, eH2:e};
 }
+
 function optimise(M, wx){
-  /* Bisection on λ: find the lowest λ (most energy-frugal) plan
-     that still meets the lap-time target. This is the Pareto-optimal
-     point: minimum hydrogen consumption subject to valid lap time.  */
+  const target = lapTimeTarget;
   let lo=0, hi=4.0;
-  let best=solveDP(hi, M, wx);          // high λ → always feasible anchor
+  let best=solveDP(hi, M, wx);
   for(let it=0; it<16; it++){
     const mid=(lo+hi)/2, r=solveDP(mid, M, wx);
-    if(r.lapT>LAP_T_TARGET) lo=mid;
+    if(r.lapT>target) lo=mid;
     else { hi=mid; best=r; }
   }
   best.version = (state.plan ? state.plan.version : 0)+1;
@@ -941,7 +946,13 @@ const state = {
   mode:'demo', lap:1, s:0, v:27/3.6, t:0, eH2:0, eFC:0,
   attempt:1, attemptT:0, attemptE:0,
   plan:null, lapLog:[], prevLog:null, laps:[], attempts:[],
-  fcT:38, R:0, S:0, alerts:[], aiBusy:false
+  fcT:38, R:0, S:0, alerts:[], aiBusy:false,
+  /* Urban Concept stop state machine (Art. 227)
+     null      → driving normally
+     'braking' → forced deceleration to stop line
+     'stopped' → at full stop, counting down stopTimer
+     stopTimer → seconds remaining at the stop line               */
+  stopPhase: null, stopTimer: 0
 };
 
 /* CdA convergence history for the chart */
@@ -953,24 +964,80 @@ function planAt(s){
 }
 
 function simTick(dtSim){
-  const pt=ptAt(state.s), p=planAt(state.s);
-  const gust={...WX, ms:WX.ms+(Math.random()-.5)*1.5};
-  let P=0;
-  if(p){
-    const driverLag = Math.random()<0.06;   // occasional plan non-compliance
-    P = (p.burn!==driverLag) ? P_SET*(0.95+Math.random()*0.1) : 0;
+  const isUC = activeProfile.stopPerLap;
+  const stopZoneStart = isUC ? LAP_LEN * activeProfile.stopZoneFrac : Infinity;
+  const brakeDistM    = isUC ? activeProfile.brakingDistM : 0;
+  const stopSecs      = isUC ? activeProfile.stopTimeSec  : 0;
+
+  /* ── Urban Concept stop state machine (Art. 227) ── */
+  if(isUC){
+    if(!state.stopPhase && state.s >= stopZoneStart - brakeDistM){
+      /* Enter braking zone — force deceleration to stop line */
+      state.stopPhase = 'braking';
+    }
+
+    if(state.stopPhase === 'braking'){
+      /* Controlled braking: simulate constant deceleration to zero.
+         Braking deceleration: enough to stop within brakingDistM.           */
+      const distToStop = Math.max(0.1, stopZoneStart - state.s);
+      const vSq = Math.max(0, state.v*state.v - state.v*state.v*(dtSim*5/distToStop));
+      const vBrake = Math.sqrt(vSq) * 0.88;  // energy dissipated in braking
+      state.v = Math.max(0, vBrake - 0.6*dtSim);
+      state.s += state.v * dtSim;
+      state.t += dtSim;
+      state.fcT = Math.max(35, state.fcT - 0.04*dtSim*8); // FC cools during brake
+      state.attemptT += 0;  // tracked in lapDone
+      emitFrame(0);
+      if(state.v < 0.3 || state.s >= stopZoneStart){
+        /* Full stop reached — Art. 227 complied */
+        state.v = 0;
+        state.s = stopZoneStart;
+        state.stopPhase = 'stopped';
+        state.stopTimer = stopSecs;
+        addAlert(`FULL STOP — ${stopSecs} s · Art. 227 (Urban Concept)`, false, true);
+      }
+      return;
+    }
+
+    if(state.stopPhase === 'stopped'){
+      /* Hold at stop line while marshal verifies (Art. 227) */
+      state.t += dtSim;
+      state.stopTimer -= dtSim;
+      emitFrame(0);
+      if(state.stopTimer <= 0){
+        state.stopPhase = null;
+        state.stopTimer = 0;
+        /* Lap complete — fire lapDone, reset for launch */
+        lapDone();
+      }
+      return;
+    }
   }
-  const r=stepDyn(state.v, P, pt, TRUE, gust);
-  const ds=(state.v+r.v2)/2*dtSim;
-  state.v=r.v2; state.t+=dtSim; state.s+=ds;
-  const eFC=P*dtSim/3600, eH2=P>0?eFC/etaSys(P,TRUE):0;
-  state.eFC+=eFC; state.eH2+=eH2;
-  state.R+=eFC*3600; state.S+=eFC*3600*0.88;
-  state.fcT += (P>0?0.05:-0.03)*dtSim*8;
+
+  /* ── Normal driving (both Prototype and UC between stops) ── */
+  const pt = ptAt(state.s);
+  const p  = planAt(state.s);
+  const gust = {...WX, ms:WX.ms+(Math.random()-.5)*1.5};
+  let P = 0;
+  if(p){
+    const driverLag = Math.random()<0.06;
+    const Ps = p.launch ? pLaunch() : pCruise();
+    P = (p.burn!==driverLag) ? Ps*(0.95+Math.random()*0.1) : 0;
+  }
+  const r = stepDyn(state.v, P, pt, TRUE, gust);
+  const ds = (state.v+r.v2)/2*dtSim;
+  /* Clamp actual speed to V_MAX — driver holds the safe band, matching the
+     plan's own corner/straight cap; prevents launch-burst overshoot.    */
+  state.v = Math.min(r.v2, V_MAX); state.t += dtSim; state.s += ds;
+  const eFC = P*dtSim/3600, eH2 = P>0 ? eFC/etaSys(P,TRUE) : 0;
+  state.eFC += eFC; state.eH2 += eH2;
+  state.R += eFC*3600; state.S += eFC*3600*0.88;
+  state.fcT += (P>0 ? 0.05 : -0.03)*dtSim*8;
   state.fcT = Math.max(35, Math.min(74, state.fcT));
   state.lapLog.push({s:state.s, v:state.v*3.6, P, eH2});
   emitFrame(P);
-  if(state.s >= LAP_LEN) lapDone();
+  /* Prototype: lap ends when crossing the start/finish line */
+  if(!isUC && state.s >= LAP_LEN) lapDone();
 }
 
 function emitFrame(P){
@@ -980,7 +1047,7 @@ function emitFrame(P){
   const f={
     A:+(state.v*3.6).toFixed(1),
     B: hrs>1e-4 ? +(distKm/hrs).toFixed(1) : 0,
-    C:li, D:fmtT(state.t), E:fmtT(LAP_T_TARGET),
+    C:li, D:fmtT(state.t), E:fmtT(lapTimeTarget),
     F:planAt(state.s)?+planAt(state.s).vT.toFixed(1):0,
     G:18.4, H:15.1, I:16.2,
     J:+(P/18.4).toFixed(2), K:0.4, L:+(P*0.85/16.2).toFixed(2),
@@ -993,6 +1060,9 @@ function emitFrame(P){
   handleFrame(f);
 }
 function cuePct(){
+  /* During Urban Concept stop: show brake/stop cue via P channel */
+  if(activeProfile.stopPerLap && state.stopPhase==='braking') return 10; // slow
+  if(activeProfile.stopPerLap && state.stopPhase==='stopped')  return 0;
   const p=planAt(state.s); if(!p) return 50;
   return Math.max(0,Math.min(100,50-(state.v*3.6-p.vT)*8));
 }
@@ -1024,26 +1094,8 @@ function lapDone(){
 
   debrief(planE, e, t);
 
-  /* ══════════════════════════════════════════════════════════
-     REPLACE-ME(fit): real model fitting
-     ══════════════════════════════════════════════════════════
-     What to do: Replace the demo convergence below with a real
-     least-squares regression on coast windows from the MQTT log.
-
-     In Python (pit laptop):
-       coast_windows = log_df[log_df['L'] < 0.5]  # motor current ~0
-       from scipy.optimize import curve_fit
-       def model(v, c0, c2): return -(c0 + c2*v**2)
-       (c0,c2), _ = curve_fit(model, coast_windows['A']/3.6,
-                               np.diff(coast_windows['A']/3.6)/0.2)
-       Crr = c0 / (m * 9.81)
-       CdA = 2*c2 / 1.225
-
-     Then update EST.Crr and EST.CdA via a POST to a local endpoint,
-     or just reload the page with the new values hardcoded in TRUE.
-
-     Current state: parameters relax toward true values each lap
-     (demonstrating convergence for the award paper §3 narrative).     */
+  /* REPLACE-ME(fit): swap fitModel() for a least-squares fit on the
+     logged coast windows (motor current ≈ 0). Demo relaxes toward TRUE. */
   fitModel();
 
   /* Log CdA convergence for the chart */
@@ -1052,12 +1104,15 @@ function lapDone(){
   fitHistory.true_.push(TRUE.CdA);
 
   if(WX.rain) addAlert('WET MODE — corner caps derated −25%', false, true);
-  state.plan = optimise(EST, WX);   // ★ replan for lap N+1
+  state.plan = optimise(EST, WX);   // re-plan for lap N+1
   renderPlanChart(); renderStrip(); renderTrack();
   renderLaps(); renderModel(); renderFitChart();
 
   state.prevLog = [...state.lapLog];
   state.lap++; state.s=0; state.t=0; state.eH2=0; state.eFC=0; state.lapLog=[];
+  /* Urban Concept relaunches from rest each lap (Art. 227 stop);
+     Prototype carries its speed across the line (rolling).           */
+  if(activeProfile.stopPerLap){ state.v=0; state.stopPhase=null; state.stopTimer=0; }
 }
 
 function fitModel(){
@@ -1076,57 +1131,44 @@ const LOSS_TYPES = [
   s => `FC temperature spike → set-point derated for ${(3+Math.random()*8).toFixed(0)} s`,
   s => `T6 exit undercut plan speed by ${(1+Math.random()*2).toFixed(1)} km/h → time lost`
 ];
+/* Safe DOM list builder — never injects HTML from external sources */
+function safeList(id, rows){
+  const el=document.getElementById(id); el.innerHTML='';
+  rows.forEach(txt=>{
+    const d=document.createElement('div'); d.className='item';
+    d.textContent=txt; el.appendChild(d);
+  });
+}
+
 function debrief(planE, e, t){
-  const dE=(e-planE).toFixed(1), dT=(t-LAP_T_TARGET).toFixed(1);
+  const dE=(e-planE).toFixed(1), dT=(t-lapTimeTarget).toFixed(1);
   const seg = TRACK.find(s=>s.type==='straight') || {name:'S1'};
   const losses = LOSS_TYPES.slice().sort(()=>Math.random()-.5).slice(0,2);
   const items=[
-    `Lap ${state.lap}: <b>${e.toFixed(1)} Wh</b> vs plan ${planE} Wh (Δ ${+dE>0?'+':''}${dE} Wh)`,
-    `Time ${fmtT(t)} vs target ${fmtT(LAP_T_TARGET)} (Δ ${+dT>0?'+':''}${dT} s)`,
+    `Lap ${state.lap}: ${e.toFixed(1)} Wh vs plan ${planE} Wh (Δ ${+dE>0?'+':''}${dE} Wh)`,
+    `Time ${fmtT(t)} vs target ${fmtT(lapTimeTarget)} (Δ ${+dT>0?'+':''}${dT} s)`,
     losses[0](seg.name),
     losses[1](seg.name)
   ];
-  document.getElementById('debrief').innerHTML =
-    items.map(i=>`<div class="item">${i}</div>`).join('');
+  safeList('debrief', items);
 
-  /* Next-lap changes derived from plan comparison */
+  /* Next-lap changes */
   const changes=[
-    `Coast <b>${(25+Math.random()*30)|0} m earlier</b> into T3 (saves ~${(1+Math.random()*3).toFixed(1)} Wh)`,
+    `Coast ${(25+Math.random()*30)|0} m earlier into T3 (saves ~${(1+Math.random()*3).toFixed(1)} Wh)`,
     WX.rain
-      ? `<b>WET:</b> corner caps −25% — hold ${(26+Math.random()*2).toFixed(0)} km/h T1 entry`
-      : `Hold <b>${(29+Math.random()*3).toFixed(0)} km/h</b> on back straight (wind shift ${WX.ms.toFixed(1)} m/s)`,
-    state.plan && state.plan.lapT < LAP_T_TARGET-10
-      ? `FC set-point <b>−15 W</b> on S/F straight (margin is comfortable)`
-      : `FC set-point <b>+10 W</b> on S/F straight (time budget tight)`
+      ? `WET: corner caps −25% — hold ${(26+Math.random()*2).toFixed(0)} km/h T1 entry`
+      : `Hold ${(29+Math.random()*3).toFixed(0)} km/h on back straight (wind ${WX.ms.toFixed(1)} m/s)`,
+    state.plan && state.plan.lapT < lapTimeTarget-10
+      ? `FC set-point −15 W on S/F straight (margin comfortable)`
+      : `FC set-point +10 W on S/F straight (time budget tight)`
   ];
-  document.getElementById('next').innerHTML =
-    changes.map(c=>`<div class="item">${c}</div>`).join('');
+  safeList('next', changes);
 }
 
-/* ══════════════════════════════════════════════════════════════════════
-   8 · AI STRATEGIST HOOK
-   ══════════════════════════════════════════════════════════════════════
-   REPLACE-ME(ai):
-   ─────────────────
-   Point ⚙ Settings → AI endpoint at your Flask proxy server.
-   The proxy calls an AI/LLM API server-side (never ship an API key
-   in browser code). 20-line proxy is in the Finalization Guide §3.5.
-
-   Request this dashboard sends:
-     POST <your-endpoint>
-     { context: { track, weather, model, lastLaps, plan },
-       question: "Top 3 strategy adjustments for next lap?" }
-   Your proxy forwards to the AI API and returns { text: "..." }.
-
-   System prompt recommendation:
-     "You are the race strategist for a Shell Eco-marathon hydrogen
-      prototype. You receive lap telemetry, model fit and weather.
-      Reply with at most 3 concrete, safe adjustments for the next
-      lap, with brief reasoning and expected Wh effect. Safety
-      overrides efficiency always. Be concise — 10-second debrief."  */
+/* 8 · AI STRATEGIST — configure endpoint in ⚙ Settings */
 function strategistContext(){
   return {
-    track:{ lapLen:LAP_LEN, target:LAP_T_TARGET, turns:7 },
+    track:{ lapLen:LAP_LEN, target:lapTimeTarget, turns:7 },
     weather:WX,
     model:{ CdA:EST.CdA, Crr:EST.Crr, etaMax:EST.etaMax },
     lastLaps:state.laps.slice(-3),
@@ -1227,7 +1269,7 @@ function handleStrategy(msg){
       steps.push({s, burn:action==='BURN', vT:vMid, cap:vCap(pt,WX)});
     }
   }
-  state.plan={plan:steps, lapT:msg.lapTimeTargetSec||LAP_T_TARGET,
+  state.plan={plan:steps, lapT:msg.lapTimeTargetSec||lapTimeTarget,
               eH2:msg.energyBudgetWh||6.5, version:msg.planVersion||1};
   if(msg.weather) WX={ms:msg.weather.windMs||WX.ms,
                        dirDeg:msg.weather.windDirDeg||WX.dirDeg,
@@ -1243,8 +1285,7 @@ function setDot(c,l){
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   10 · DATA DICTIONARY — 21 channels A–U
-   Source: TelemetryModel.java, CarProfile.java (ThaiGerTrackControl)   */
+   10 · DATA DICTIONARY — 21 channels A–U */
 const DICT = [
   {k:'A',name:'Speed',          unit:'km/h', alarm:null,    goal:'2',  desc:'Instantaneous wheel speed'},
   {k:'B',name:'Avg speed',      unit:'km/h', alarm:'<25.1', goal:'2',  desc:'Attempt average (Art. 226)'},
@@ -1309,7 +1350,20 @@ function handleFrame(f){
   const spd=document.getElementById('spd');
   const p=planAt(state.mode==='demo'?state.s:0);
   spd.textContent=(f.A??0).toFixed(1);
-  if(p){
+
+  /* Urban Concept stop cue overrides the burn/coast cue (Art. 227) */
+  if(activeProfile.stopPerLap && state.stopPhase){
+    const act=document.getElementById('cue-act'), sub=document.getElementById('cue-sub');
+    if(state.stopPhase==='braking'){
+      act.textContent='BRAKE'; act.className='stop';
+      sub.textContent=`full stop ahead — Art. 227 (${(LAP_LEN-state.s)|0} m)`;
+      spd.className='hi';
+    } else {
+      act.textContent='STOP'; act.className='stop';
+      sub.textContent=`hold ${Math.max(0,state.stopTimer).toFixed(1)} s · then launch`;
+      spd.className='ok';
+    }
+  } else if(p){
     const lo=p.vT-1.5, hi=p.vT+1.5;
     spd.className = f.A<lo?'lo':(f.A>hi?'hi':'ok');
     const span=38-18;
@@ -1350,6 +1404,12 @@ function cue(p){
   const act=document.getElementById('cue-act'), sub=document.getElementById('cue-sub');
   let i=Math.floor(state.s/DS), j=i;
   const cur=state.plan.plan[i]?.burn;
+  /* Urban Concept launch burst (first LAUNCH_DIST m after a stop) */
+  if(activeProfile.stopPerLap && p.launch){
+    act.textContent='LAUNCH'; act.className='launch';
+    sub.textContent=`accelerate from stop → ${p.vT.toFixed(0)} km/h`;
+    return;
+  }
   while(j<state.plan.plan.length && state.plan.plan[j].burn===cur) j++;
   const dNext=(j*DS-state.s)|0, nxt=state.plan.plan[j];
   act.textContent=cur?'BURN':'COAST';
@@ -1363,8 +1423,13 @@ function addAlert(msg, isError=false, isWarn=false){
   if(state.alerts.at(-1)===msg) return;
   state.alerts.push(msg); if(state.alerts.length>4) state.alerts.shift();
   const cls=isError?'al':isWarn?'al warn':'al';
-  document.getElementById('alerts').innerHTML=
-    state.alerts.map(a=>`<div class="${cls}">${a}</div>`).join('');
+  const container=document.getElementById('alerts');
+  container.innerHTML='';
+  state.alerts.forEach(a=>{
+    const d=document.createElement('div');
+    d.className=cls; d.textContent=a;   // textContent: no HTML injection from MQTT data
+    container.appendChild(d);
+  });
 }
 
 function renderLaps(){
@@ -1431,7 +1496,9 @@ function renderStrip(){
   if(!state.plan) return;
   const W=c.width, n=state.plan.plan.length;
   state.plan.plan.forEach((p,i)=>{
-    g.fillStyle=p.burn?'rgba(0,217,126,.8)':'rgba(255,170,0,.55)';
+    /* Launch zone (Urban Concept) drawn brighter green */
+    g.fillStyle = p.launch ? 'rgba(0,217,126,1)'
+                : p.burn   ? 'rgba(0,217,126,.8)' : 'rgba(255,170,0,.55)';
     g.fillRect(i/n*W, 18, W/n+1, 26);
   });
   /* Corner tick-marks */
@@ -1439,6 +1506,12 @@ function renderStrip(){
     const x=(f*W)|0;
     g.fillStyle='rgba(255,255,255,.25)'; g.fillRect(x,14,1,30);
   });
+  /* Urban Concept stop line at the lap end (Art. 227) */
+  if(activeProfile.stopPerLap){
+    g.fillStyle='var(--red)'; g.fillStyle='#FF3B3B';
+    g.fillRect(W-3, 10, 3, 42);
+    g.font='9px monospace'; g.fillText('STOP', W-30, 8);
+  }
   /* Position marker */
   g.fillStyle='#E8EDF2'; g.fillRect(state.s/LAP_LEN*W-2, 8, 4, 46);
 }
@@ -1465,11 +1538,20 @@ function renderTrack(){
     inner+=`<text x="${p.x+4}" y="${p.y-4}" fill="#7A8A99"
       font-size="8" font-family="JetBrains Mono">${name}</text>`;
   });
-  /* Track info label */
+  /* Urban Concept stop line at start/finish (Art. 227) */
+  if(activeProfile.stopPerLap){
+    const sp=PTS[0];
+    inner+=`<circle cx="${sp.x}" cy="${sp.y}" r="9" fill="none"
+      stroke="#FF3B3B" stroke-width="2.5"/>`;
+    inner+=`<text x="${sp.x+11}" y="${sp.y+3}" fill="#FF3B3B"
+      font-size="8" font-family="JetBrains Mono">STOP (Art.227)</text>`;
+  }
+  /* Track info label — category specific */
+  const lbl = activeProfile.stopPerLap
+    ? `SILESIA RING (Art.231) · ${Math.round(LAP_LEN)} m/lap · URBAN CONCEPT: full stop/lap · launch=bright green`
+    : `SILESIA RING (Art.231) · ${Math.round(LAP_LEN)} m/lap · PROTOTYPE: no stop · green=BURN amber=COAST`;
   inner+=`<text x="${mx[0]}" y="${my[0]-8}" fill="#3D4F60"
-    font-size="8" font-family="JetBrains Mono">
-    SILESIA RING 7-TURN (Art.231) · ${Math.round(LAP_LEN)} m/lap · green=BURN amber=COAST
-  </text>`;
+    font-size="8" font-family="JetBrains Mono">${lbl}</text>`;
   /* Moving car dot */
   inner+=`<circle id="car" r="6" fill="#E8EDF2" stroke="${activeProfile.color}" stroke-width="2.5"/>`;
   svg.innerHTML=inner;
