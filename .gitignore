@@ -1,6 +1,10 @@
 # Claude Code internal files
 .claude/
 
+# Internal documents — not for public repo
+SEM-Poland-2026_DataTelemetry_APPLICATION-FINAL.tex
+ThaiGer_SEM2026_Finalization_Guide.md
+
 # LaTeX build artefacts
 *.aux
 *.log
