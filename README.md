@@ -2,7 +2,7 @@
 
 Race strategy dashboard for **Thaiger 7** — Shell Eco-marathon Poland 2026.
 
-**[→ Open Dashboard](https://YOUR-USERNAME.github.io/YOUR-REPO-NAME/)**
+**[→ Open Dashboard](https://pankajragmy-de.github.io/ThaiGer-Live-Dashboard/)**
 
 ---
 
