@@ -1,0 +1,19 @@
+# Claude Code internal files
+.claude/
+
+# LaTeX build artefacts
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# macOS
+.DS_Store
+
+# Source data files (large, not needed for the live dashboard)
+*.kml
+*.csv
+*.pdf
