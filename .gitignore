@@ -29,3 +29,6 @@ figures/
 
 # Raw source data (contains personal name) — keep local
 *.odt
+
+# IDE
+.idea/
