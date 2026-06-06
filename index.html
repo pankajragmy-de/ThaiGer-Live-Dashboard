@@ -1307,7 +1307,9 @@ const DICT = [
   {k:'R',name:'FC energy',      unit:'Ws',   alarm:null,    goal:'2',  desc:'Cumulative fuel cell energy'},
   {k:'S',name:'Motor energy',   unit:'Ws',   alarm:null,    goal:'2',  desc:'Cumulative motor energy'},
   {k:'T',name:'FC efficiency',  unit:'%',    alarm:null,    goal:'2',  desc:'Stack electrical efficiency'},
-  {k:'U',name:'System eff.',    unit:'%',    alarm:null,    goal:'2',  desc:'Overall system efficiency'}
+  {k:'U',name:'System eff.',    unit:'%',    alarm:null,    goal:'2',  desc:'Overall system efficiency'},
+  {k:'ts',name:'Timestamp',     unit:'ms',   alarm:null,    goal:'1',  desc:'Epoch ms (frame time, live)'},
+  {k:'dist',name:'Distance',    unit:'km',   alarm:null,    goal:'1',  desc:'Cumulative distance → lap position'}
 ];
 const ddVals = {};   // live values displayed in the dictionary
 
@@ -1345,10 +1347,49 @@ function updateDict(f){
    ══════════════════════════════════════════════════════════════════════ */
 let cvPlan, cvPow, cvFit, powBuf=[];
 
+/* Parse a "m:ss" (or "h:mm:ss") time string to seconds */
+function parseTimeStr(s){
+  if(typeof s!=='string') return 0;
+  const p=s.split(':').map(Number); if(p.some(isNaN)) return 0;
+  return p.reduce((a,v)=>a*60+v,0);
+}
+
 function handleFrame(f){
   updateDict(f);
+
+  /* ── LIVE alignment: derive position/lap/energy from the real frame ──
+     The cockpit app publishes cumulative distance `dist` (km) and a
+     cumulative lap counter `C`. We map them to a lap-relative position so
+     the car marker, BURN/COAST cue, target band and plan strip all advance
+     from real telemetry — exactly as they do from the simulator in DEMO. */
+  if(state.mode!=='demo'){
+    if(typeof f.dist==='number'){
+      const dm=f.dist*1000;                        // km → m (cumulative)
+      const sNew=((dm%LAP_LEN)+LAP_LEN)%LAP_LEN;    // lap-relative metres
+      /* lap-boundary crossing → log the completed lap from R (FC energy) and D */
+      if(state._liveDist!==undefined && sNew < state._liveS - LAP_LEN*0.5){
+        const lapFCWh=Math.max(0,(f.R-(state._liveR0??f.R))/3600);
+        const etaFC=Math.max(0.2,(f.T||70)/100);
+        const lapH2=lapFCWh/etaFC;                  // H₂-equivalent Wh
+        const lapSec=Math.max(1,parseTimeStr(f.D)-(state._liveT0??parseTimeStr(f.D)));
+        const li=((Math.max(1,f.C)-1)%LAPS_PER_ATTEMPT)+1;
+        state.laps.push({n:li, t:+lapSec.toFixed(1), e:+lapH2.toFixed(2),
+          h2:+(lapH2/LHV_WH_PER_L).toFixed(2), avg:+(LAP_LEN/lapSec*3.6).toFixed(1)});
+        state._liveR0=f.R; state._liveT0=parseTimeStr(f.D);
+        state._liveAnchored=true;   // baseline now at a real lap start
+        renderLaps();
+      }
+      if(state._liveR0===undefined){ state._liveR0=f.R; state._liveT0=parseTimeStr(f.D); }
+      state._liveS=sNew; state._liveDist=f.dist; state.s=sNew;
+    }
+    if(typeof f.C==='number'){
+      state.lap=Math.max(1,f.C);
+      state.attempt=Math.floor((Math.max(1,f.C)-1)/LAPS_PER_ATTEMPT)+1;
+    }
+  }
+
   const spd=document.getElementById('spd');
-  const p=planAt(state.mode==='demo'?state.s:0);
+  const p=planAt(state.s);
   spd.textContent=(f.A??0).toFixed(1);
 
   /* Urban Concept stop cue overrides the burn/coast cue (Art. 227) */
@@ -1374,12 +1415,25 @@ function handleFrame(f){
     cue(p);
   }
   if(state.plan){
-    const frac = state.mode==='demo' ? state.s/LAP_LEN : 0.5;
+    const frac = state.s/LAP_LEN;                  // real position in both modes
     const eP=state.plan.eH2*frac, tP=state.plan.lapT*frac;
-    const de=state.eH2-eP, dt=state.t-tP;
+    /* this-lap energy/time: simulator accumulators in DEMO; from R/D in LIVE */
+    let eNow=state.eH2, tNow=state.t;
+    if(state.mode!=='demo'){
+      const lapFCWh=Math.max(0,(f.R-(state._liveR0??f.R))/3600);
+      eNow=lapFCWh/Math.max(0.2,(f.T||70)/100);
+      tNow=Math.max(0,parseTimeStr(f.D)-(state._liveT0??parseTimeStr(f.D)));
+    }
+    const de=eNow-eP, dt=tNow-tP;
     const dEel=document.getElementById('dE'), dTel=document.getElementById('dT');
-    dEel.textContent=(de>0?'+':'')+de.toFixed(1); dEel.className='v '+(de>0?'bad':'good');
-    dTel.textContent=(dt>0?'+':'')+dt.toFixed(1); dTel.className='v '+(dt>0?'bad':'good');
+    /* LIVE: suppress the delta until anchored to a real lap start (avoids a
+       misleading number when the dashboard joins a lap already in progress) */
+    if(state.mode!=='demo' && !state._liveAnchored){
+      dEel.textContent='—'; dEel.className='v'; dTel.textContent='—'; dTel.className='v';
+    } else {
+      dEel.textContent=(de>0?'+':'')+de.toFixed(1); dEel.className='v '+(de>0?'bad':'good');
+      dTel.textContent=(dt>0?'+':'')+dt.toFixed(1); dTel.className='v '+(dt>0?'bad':'good');
+    }
   }
   /* Safety alarms — use active car profile thresholds */
   if(f.N > activeProfile.fcTempAlarm)
@@ -1395,8 +1449,11 @@ function handleFrame(f){
   cvPow.data.labels=powBuf.map(()=>'');
   cvPow.update('none');
 
+  /* lap clock: LIVE uses the frame's lap counter C and total time D */
+  const liveLi = (typeof f.C==='number') ? ((Math.max(1,f.C)-1)%LAPS_PER_ATTEMPT)+1 : f.C;
+  const clkTime = state.mode!=='demo' ? (f.D||'0:00') : fmtT(state.attemptT+state.t);
   document.getElementById('lapclock').textContent=
-    `A${state.attempt}/${MAX_ATTEMPTS} · L${f.C}/${LAPS_PER_ATTEMPT} · ${fmtT(state.attemptT+state.t)} / 35:00`;
+    `A${state.attempt}/${MAX_ATTEMPTS} · L${liveLi}/${LAPS_PER_ATTEMPT} · ${clkTime} / 35:00`;
   drawCar();
 }
 
