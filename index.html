@@ -38,6 +38,7 @@
   .pill{font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);color:var(--dim);cursor:pointer;background:none;letter-spacing:.06em;white-space:nowrap}
   .pill.active{border-color:var(--blue);color:var(--blue);background:var(--blue2)}
   .pill.demo.active{border-color:var(--violet);color:var(--violet);background:rgba(155,107,255,.12)}
+  .pill.race.active{border-color:var(--green);color:var(--green);background:rgba(0,217,126,.12)}
   .pill.car-t7.active{border-color:var(--blue);color:var(--blue);background:var(--blue2)}
   .pill.car-bg.active{border-color:var(--violet);color:var(--violet);background:rgba(155,107,255,.12)}
   #conn{font-family:var(--mono);font-size:11px;display:flex;align-items:center;gap:6px;color:var(--dim);white-space:nowrap}
@@ -157,6 +158,7 @@
     <div id="logo">ThaiGer <span>H₂</span> · Lap Coach</div>
     <div class="tb-sep"></div>
     <button class="pill demo active" id="m-demo" onclick="setMode('demo')">DEMO DATA</button>
+    <button class="pill race" id="m-race" onclick="setMode('race')">RACE PLAN</button>
     <button class="pill" id="m-live" onclick="setMode('live')">LIVE MQTT</button>
     <div class="tb-sep"></div>
     <button class="pill car-t7 active" id="car-t7" onclick="switchCar('thaiger7')">THAIGER 7</button>
@@ -231,6 +233,10 @@
       <div class="chartwrap">
         <div class="lbl">FC Power (live, W)</div>
         <canvas class="cv" id="cvPow"></canvas>
+      </div>
+      <div class="chartwrap">
+        <div class="lbl">Elevation · Lap Profile (real, Open-Meteo) — car position ▾</div>
+        <canvas id="cvElev" style="width:100%!important;height:46px!important"></canvas>
       </div>
     </div>
 
@@ -428,23 +434,23 @@ const PROFILES = {
   thaiger7: {
     name:'THAIGER 7', category:'Prototype · H₂', color:'#3D6FFF',
     fcTempAlarm:70, cellDiffAlarm:50, minSpeedAlarm:25,
-    // Ch. I: vehicle + driver minimum (50 kg driver incl. gear)
-    mass:{ car:45, driverMin:50 },   // total ≈ 95 kg
+    // REAL race weight: 23 kg vehicle + 58 kg driver (incl. suit) = 81 kg
+    mass:{ car:23, driverMin:58 },   // total = 81 kg
     mqttCar:'thaiger7',
     // Art. 227: Prototype does NOT have the compulsory-stop rule
     stopPerLap: false,
     stopTimeSec: 0,
-    // Vehicle physics (Prototype: aerodynamic shell, low drag)
+    // Vehicle physics — conservative pre-measurement estimates (coast-down TBD)
     physics:{
-      CdA:0.045,      // m² — small aerodynamic shell (exemplary)
-      Crr:0.0025,     // rolling resistance (lightweight prototype)
+      CdA:0.064,      // m² — conservative drag-area estimate
+      Crr:0.0032,     // rolling resistance (conservative)
       etaDrive:0.87,  // drivetrain efficiency
-      Popt:160,       // W — FC power at peak efficiency
+      Popt:150,       // W — FC power at peak efficiency
       etaMax:0.40     // peak H₂→wheel system efficiency
     },
-    // FC burn set-points: gentle eco burn, no launch boost (rolling laps)
-    pCruise:235, pLaunch:235,
-    // DP lap-time target (s): plan to 178 s → banks margin under the 35-min cap
+    // FC burn set-points (eco burst, no launch boost on rolling laps)
+    pCruise:170, pLaunch:170,
+    // DP lap-time target (s): plan to 178 s → ~2.3 min margin under 35-min cap
     lapTimeTarget: 178,
     // Initial speed for DP forward pass: rolling start from prev lap
     startSpeedMS: 27/3.6
@@ -622,13 +628,140 @@ const LON_M=111319*Math.cos(REF_LAT*Math.PI/180), LAT_M=111000;
 const GPS_RAW_LEN = SILESIA_GPS.reduce((a,s)=>a+s[3],0);
 const GPS_SCALE   = OFFICIAL_LAP_M / GPS_RAW_LEN;
 
+/* ══════════════════════════════════════════════════════════════════════
+   REAL ELEVATION + RACE-PLAN PLAYBACK  (Silesia Ring, ThaiGer 7 @ 81 kg)
+   ══════════════════════════════════════════════════════════════════════
+   SILESIA_ELEV/GRADE: real elevation (Open-Meteo, 202–206 m, flat) and the
+   per-segment gradient it implies — fed into the physics (Eq.1, grade term).
+   RACE_PLAN_DATA: the computed race-day OPTIMUM trajectory (per 12 m step:
+   distance, plan speed km/h, burn flag, FC set-point W). RACE PLAN mode plays
+   this back deterministically so you can watch the strategy respond to every
+   corner (grip cap) and the terrain. Model: m=81 kg, lap 178.5 s,
+   4.67 Wh/lap, ~853 km/m³.                              */
+const SILESIA_ELEV = [204.4,204.6,204.8,205.0,205.0,205.0,205.0,205.0,205.0,205.0,205.2,205.2,205.2,205.2,205.2,205.0,205.0,205.0,205.0,205.0,205.0,205.0,205.0,204.8,204.6,204.4,204.2,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,203.8,203.6,203.4,203.2,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,202.8,202.6,202.4,202.2,202.0,202.0,202.0,202.0,202.0,202.0,202.0,202.2,202.4,202.6,202.8,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.2,203.4,203.6,203.8,204.0,204.0,204.0,204.0,204.2];
+const SILESIA_GRADE = [1.66,1.66,1.66,0.0,0.0,0.0,0.0,0.0,0.0,1.66,0.0,0.0,0.0,0.0,-1.66,0.0,0.0,0.0,0.0,0.0,0.0,0.0,-1.66,-1.66,-1.66,-1.66,-1.66,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,-1.66,-1.66,-1.66,-1.66,-1.66,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,-1.66,-1.66,-1.66,-1.66,-1.66,0.0,0.0,0.0,0.0,0.0,0.0,1.66,1.66,1.66,1.66,1.66,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.66,1.66,1.66,1.66,1.66,0.0,0.0,0.0,1.66,1.52];
+const RACE_PLAN_DATA = [
+  [0,25.0,1,170.0],
+  [12,25.4,1,170.0],
+  [24,25.7,1,170.0],
+  [36,26.1,1,170.0],
+  [48,27.3,0,0],
+  [60,27.1,0,0],
+  [72,26.9,0,0],
+  [84,26.6,0,0],
+  [96,26.4,0,0],
+  [108,26.2,1,170.0],
+  [120,26.4,1,170.0],
+  [132,27.6,1,170.0],
+  [144,28.6,1,170.0],
+  [156,29.5,1,170.0],
+  [168,30.3,0,0],
+  [180,30.7,0,0],
+  [192,30.3,0,0],
+  [204,29.7,0,0],
+  [216,29.3,0,0],
+  [228,28.8,0,0],
+  [240,28.3,0,0],
+  [252,27.7,1,170.0],
+  [264,28.6,0,0],
+  [276,28.9,0,0],
+  [288,29.3,0,0],
+  [300,29.6,0,0],
+  [312,30.0,0,0],
+  [324,30.3,0,0],
+  [336,29.8,0,0],
+  [348,29.3,0,0],
+  [360,28.8,0,0],
+  [372,28.3,0,0],
+  [384,27.8,1,170.0],
+  [396,28.6,0,0],
+  [408,28.1,1,170.0],
+  [420,28.9,0,0],
+  [432,28.4,1,170.0],
+  [444,29.2,1,170.0],
+  [456,29.9,0,0],
+  [468,29.4,0,0],
+  [480,28.9,0,0],
+  [492,28.4,0,0],
+  [504,27.9,1,170.0],
+  [516,28.7,1,170.0],
+  [528,29.4,0,0],
+  [540,28.9,0,0],
+  [552,28.4,1,170.0],
+  [564,29.2,0,0],
+  [576,28.7,0,0],
+  [588,28.2,0,0],
+  [600,28.6,0,0],
+  [612,28.9,0,0],
+  [624,29.3,0,0],
+  [636,29.7,0,0],
+  [648,30.0,0,0],
+  [660,29.5,0,0],
+  [672,29.0,0,0],
+  [684,28.5,1,170.0],
+  [696,29.3,1,170.0],
+  [708,30.1,1,170.0],
+  [720,30.9,0,0],
+  [732,30.6,1,170.0],
+  [744,31.3,0,0],
+  [756,31.1,0,0],
+  [768,30.8,0,0],
+  [780,30.5,0,0],
+  [792,30.2,0,0],
+  [804,30.7,0,0],
+  [816,31.2,0,0],
+  [828,31.7,0,0],
+  [840,32.2,0,0],
+  [852,32.7,0,0],
+  [864,32.4,0,0],
+  [876,32.2,0,0],
+  [888,32.0,0,0],
+  [900,31.8,0,0],
+  [912,31.5,0,0],
+  [924,31.3,0,0],
+  [936,30.2,0,0],
+  [948,29.2,0,0],
+  [960,28.0,0,0],
+  [972,26.9,0,0],
+  [984,25.7,0,0],
+  [996,25.4,0,0],
+  [1008,25.2,0,0],
+  [1020,24.9,0,0],
+  [1032,24.7,0,0],
+  [1044,24.4,0,0],
+  [1056,24.2,0,0],
+  [1068,24.0,0,0],
+  [1080,23.7,0,0],
+  [1092,23.5,0,0],
+  [1104,23.2,0,0],
+  [1116,22.9,0,0],
+  [1128,22.6,0,0],
+  [1140,22.3,0,0],
+  [1152,22.0,0,0],
+  [1164,21.7,0,0],
+  [1176,21.5,0,0],
+  [1188,21.3,0,0],
+  [1200,21.0,0,0],
+  [1212,19.5,0,0],
+  [1224,17.9,1,170.0],
+  [1236,19.3,0,0],
+  [1248,17.7,1,170.0],
+  [1260,19.2,0,0],
+  [1272,18.9,0,0],
+  [1284,18.6,0,0],
+  [1296,18.3,0,0],
+  [1308,16.6,1,170.0]
+];   // [s_m, v_kmh, burn, P_W] per 12 m step
+
+
 /* PTS — per-point screen coords, heading, curvature for physics & render */
 const PTS = SILESIA_GPS.map((seg,i) => ({
   x:       (seg[0]-REF_LON)*LON_M,
   y:      -(seg[1]-REF_LAT)*LAT_M,   // SVG y inverts latitude
   s:       SILESIA_GPS.slice(0,i).reduce((a,s)=>a+s[3]*GPS_SCALE,0),
   heading: seg[2],
-  grade:   0,                         // track is flat: CSV shows <0.05% grade
+  grade:   SILESIA_GRADE[i],          // real per-segment gradient (Open-Meteo elevation)
+  elev:    SILESIA_ELEV[i],           // real elevation (m)
   type:    seg[4]<100 ? 'corner' : 'straight',
   radius:  seg[4]>=999 ? Infinity : seg[4],
   name:    ''
@@ -641,7 +774,7 @@ const TRACK = SILESIA_GPS.map((seg,i) => {
     len:    seg[3]*GPS_SCALE,
     type:   seg[4]<100 ? 'corner' : 'straight',
     radius: seg[4]>=999 ? Infinity : seg[4],
-    grade:  0,
+    grade:  SILESIA_GRADE[i],
     turn:   ((seg[2]-hdgPrev+540)%360)-180,
     name:   ''
   };
@@ -730,6 +863,7 @@ const VENUE = { lat:50.529, lon:18.096, name:'Silesia Ring' };
 let WX = { ms:3.0, dirDeg:250, tempC:20, rain:false, pressure:1013,
            source:'awaiting live' };
 let _wxBase = {...WX};   // latest LIVE anchor that the demo drift varies around
+let _liveWX = null;      // cached last live current-date weather (to restore after race mode)
 
 async function fetchLiveWeather(){
   try{
@@ -746,7 +880,7 @@ async function fetchLiveWeather(){
          rain:(d.current.precipitation||0)>0.1,
          pressure:d.current.surface_pressure||1013,
          source:'Live '+(day||'today') };
-    _wxBase={...WX};
+    _wxBase={...WX}; _liveWX={...WX};
     renderWx();
     setTimeout(fetchLiveWeather, 15*60*1000);      // refresh every 15 min
   } catch(e){
@@ -869,6 +1003,25 @@ function optimise(M, wx){
   return best;
 }
 
+/* Race-day reference conditions the embedded optimum was computed for
+   (climatology for 24–28 June: warm, light W wind, dry).                 */
+const RACE_DAY_WX = { ms:3.7, dirDeg:280, tempC:24, rain:false,
+                      pressure:990, source:'Race-day model (24–28 Jun)' };
+
+/* Build the embedded 81 kg race-day OPTIMUM into a plan object (same shape
+   as optimise()): RACE_PLAN_DATA = [s_m, v_kmh, burn(0/1), P_W] per step.
+   Corner caps are recomputed locally so the plan strip/chart show them.   */
+function buildRacePlan(){
+  const steps = RACE_PLAN_DATA.map(r => ({
+    s:r[0], vT:r[1], burn:r[2]===1, P:r[3],
+    cap:vCap(ptAt(r[0]), RACE_DAY_WX)*3.6
+  }));
+  let eH2=0;
+  for(const st of steps){ if(st.burn) eH2 += st.P*(DS/Math.max(st.vT/3.6,1))/3600/etaSys(Math.max(st.P,60),TRUE); }
+  return { plan:steps, lapT:lapTimeTarget, eH2,
+           version:(state.plan?state.plan.version:0)+1 };
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    7 · DEMO LAP SIMULATOR
    ══════════════════════════════════════════════════════════════════════
@@ -951,18 +1104,23 @@ function simTick(dtSim){
   /* ── Normal driving (both Prototype and UC between stops) ── */
   const pt = ptAt(state.s);
   const p  = planAt(state.s);
-  const gust = {...WX, ms:WX.ms+(Math.random()-.5)*1.5};
-  let P = 0;
-  if(p){
-    const driverLag = Math.random()<0.06;
-    const Ps = p.launch ? pLaunch() : pCruise();
-    P = (p.burn!==driverLag) ? Ps*(0.95+Math.random()*0.1) : 0;
+  let P = 0, vNext;
+  if(state.mode==='race'){
+    /* RACE PLAN: deterministic playback of the embedded optimum — follow the
+       plan's speed and FC set-point exactly (no driver noise, fixed weather). */
+    P = p ? (p.burn ? (p.P||pCruise()) : 0) : 0;
+    vNext = p ? p.vT/3.6 : state.v;
+  } else {
+    const gust = {...WX, ms:WX.ms+(Math.random()-.5)*1.5};
+    if(p){
+      const driverLag = Math.random()<0.06;
+      const Ps = p.launch ? pLaunch() : pCruise();
+      P = (p.burn!==driverLag) ? Ps*(0.95+Math.random()*0.1) : 0;
+    }
+    vNext = Math.min(stepDyn(state.v, P, pt, TRUE, gust).v2, V_MAX);
   }
-  const r = stepDyn(state.v, P, pt, TRUE, gust);
-  const ds = (state.v+r.v2)/2*dtSim;
-  /* Clamp actual speed to V_MAX — driver holds the safe band, matching the
-     plan's own corner/straight cap; prevents launch-burst overshoot.    */
-  state.v = Math.min(r.v2, V_MAX); state.t += dtSim; state.s += ds;
+  const ds = (state.v+vNext)/2*dtSim;
+  state.v = vNext; state.t += dtSim; state.s += ds;
   const eFC = P*dtSim/3600, eH2 = P>0 ? eFC/etaSys(P,TRUE) : 0;
   state.eFC += eFC; state.eH2 += eH2;
   state.R += eFC*3600; state.S += eFC*3600*0.88;
@@ -1028,19 +1186,22 @@ function lapDone(){
 
   debrief(planE, e, t);
 
-  /* REPLACE-ME(fit): swap fitModel() for a least-squares fit on the
-     logged coast windows (motor current ≈ 0). Demo relaxes toward TRUE. */
-  fitModel();
-
-  /* Log CdA convergence for the chart */
-  fitHistory.labels.push('L'+state.lap);
-  fitHistory.est.push(+EST.CdA.toFixed(4));
-  fitHistory.true_.push(TRUE.CdA);
-
-  if(WX.rain) addAlert('WET MODE — corner caps derated −25%', false, true);
-  state.plan = optimise(EST, WX);   // re-plan for lap N+1
-  renderPlanChart(); renderStrip(); renderTrack();
-  renderLaps(); renderModel(); renderFitChart();
+  if(state.mode==='race'){
+    /* RACE PLAN: keep replaying the same embedded optimum (no re-fit/replan) */
+    state.plan = buildRacePlan();
+    renderPlanChart(); renderStrip(); renderTrack(); renderLaps();
+  } else {
+    /* REPLACE-ME(fit): swap fitModel() for a least-squares fit on the
+       logged coast windows (motor current ≈ 0). Demo relaxes toward TRUE. */
+    fitModel();
+    fitHistory.labels.push('L'+state.lap);
+    fitHistory.est.push(+EST.CdA.toFixed(4));
+    fitHistory.true_.push(TRUE.CdA);
+    if(WX.rain) addAlert('WET MODE — corner caps derated −25%', false, true);
+    state.plan = optimise(EST, WX);   // re-plan for lap N+1
+    renderPlanChart(); renderStrip(); renderTrack();
+    renderLaps(); renderModel(); renderFitChart();
+  }
 
   state.prevLog = [...state.lapLog];
   state.lap++; state.s=0; state.t=0; state.eH2=0; state.eFC=0; state.lapLog=[];
@@ -1158,9 +1319,29 @@ let client=null, cfg=loadCfg();
 function setMode(m){
   state.mode=m;
   document.getElementById('m-demo').classList.toggle('active',m==='demo');
+  document.getElementById('m-race').classList.toggle('active',m==='race');
   document.getElementById('m-live').classList.toggle('active',m==='live');
-  if(m==='live'){ stopDemo(); connectMqtt(); }
-  else { disconnectMqtt(); startDemo(); }
+  if(m==='live'){ stopDemo(); connectMqtt(); return; }
+  disconnectMqtt();
+  /* leaving race → restore the live current-date weather if we have it */
+  if(m!=='race' && WX.source && WX.source.startsWith('Race-day')){
+    if(_liveWX){ WX={..._liveWX}; _wxBase={..._liveWX}; } renderWx();
+  }
+  if(m==='race'){
+    /* RACE PLAN: play the embedded 81 kg race-day optimum deterministically.
+       Use the Prototype profile, race-day conditions, and reset the run. */
+    switchCar('thaiger7');
+    WX={...RACE_DAY_WX}; _wxBase={...RACE_DAY_WX}; renderWx();
+    state.lap=1; state.s=0; state.t=0; state.eH2=0; state.eFC=0; state.v=27/3.6;
+    state.attempt=1; state.attemptT=0; state.attemptE=0;
+    state.laps=[]; state.attempts=[]; state.lapLog=[]; state.prevLog=null;
+    state.plan=buildRacePlan();
+    renderPlanChart(); renderStrip(); renderTrack(); renderElev();
+    renderLaps(); renderAttemptHistory();
+    setDot('on','Race plan'); startDemo();   // demo timer drives simTick (race branch)
+    return;
+  }
+  startDemo();   // demo
 }
 
 function connectMqtt(){
@@ -1297,7 +1478,7 @@ function handleFrame(f){
      position from the live speed A each frame (smooth, like the simulator)
      and gently correct toward the dist-derived lap position to kill drift.
      Lap boundaries (for lap logging) come from the cumulative distance. */
-  if(state.mode!=='demo'){
+  if(state.mode==='live'){
     const nowTs=(typeof f.ts==='number')?f.ts:null;
     let dtf=0.2;
     if(nowTs && state._liveTs) dtf=Math.min(2,Math.max(0.02,(nowTs-state._liveTs)/1000));
@@ -1369,7 +1550,7 @@ function handleFrame(f){
     const eP=state.plan.eH2*frac, tP=state.plan.lapT*frac;
     /* this-lap energy/time: simulator accumulators in DEMO; from R/D in LIVE */
     let eNow=state.eH2, tNow=state.t;
-    if(state.mode!=='demo'){
+    if(state.mode==='live'){
       const lapFCWh=Math.max(0,(f.R-(state._liveR0??f.R))/3600);
       eNow=lapFCWh/Math.max(0.2,(f.T||70)/100);
       tNow=Math.max(0,parseTimeStr(f.D)-(state._liveT0??parseTimeStr(f.D)));
@@ -1378,7 +1559,7 @@ function handleFrame(f){
     const dEel=document.getElementById('dE'), dTel=document.getElementById('dT');
     /* LIVE: suppress the delta until anchored to a real lap start (avoids a
        misleading number when the dashboard joins a lap already in progress) */
-    if(state.mode!=='demo' && !state._liveAnchored){
+    if(state.mode==='live' && !state._liveAnchored){
       dEel.textContent='—'; dEel.className='v'; dTel.textContent='—'; dTel.className='v';
     } else {
       dEel.textContent=(de>0?'+':'')+de.toFixed(1); dEel.className='v '+(de>0?'bad':'good');
@@ -1400,14 +1581,14 @@ function handleFrame(f){
   cvPow.update('none');
 
   /* lap clock: LIVE uses the frame's lap counter C and total time D */
-  const liveLi = (typeof f.C==='number') ? ((Math.max(1,f.C)-1)%LAPS_PER_ATTEMPT)+1 : f.C;
-  const clkTime = state.mode!=='demo' ? (f.D||'0:00') : fmtT(state.attemptT+state.t);
+  const liveLi = (state.mode==='live' && typeof f.C==='number') ? ((Math.max(1,f.C)-1)%LAPS_PER_ATTEMPT)+1 : ((state.lap-1)%LAPS_PER_ATTEMPT)+1;
+  const clkTime = state.mode==='live' ? (f.D||'0:00') : fmtT(state.attemptT+state.t);
   document.getElementById('lapclock').textContent=
     `A${state.attempt}/${MAX_ATTEMPTS} · L${liveLi}/${LAPS_PER_ATTEMPT} · ${clkTime} / 35:00`;
   drawCar();
-  /* LIVE: redraw the plan strip each frame so its position marker advances
+  /* LIVE/RACE: redraw the plan strip + elevation marker each frame
      (in DEMO the demo timer already calls renderStrip) */
-  if(state.mode!=='demo') renderStrip();
+  if(state.mode!=='demo'){ renderStrip(); renderElev(); }
 }
 
 function cue(p){
@@ -1574,6 +1755,37 @@ function drawCar(){
   const pt=ptAt(state.s); car.setAttribute('cx',pt.x); car.setAttribute('cy',pt.y);
 }
 
+/* Elevation profile (real Open-Meteo elevation) with the live car position.
+   Shows how the optimum strategy sits over the terrain — the track is nearly
+   flat (≈4 m), so terrain is a minor lever here, but it IS in the physics. */
+function renderElev(){
+  const c=document.getElementById('cvElev'); if(!c) return;
+  const g=c.getContext('2d');
+  c.width=c.clientWidth*2; c.height=92;
+  const W=c.width, H=c.height, n=SILESIA_ELEV.length;
+  const lo=Math.min(...SILESIA_ELEV), hi=Math.max(...SILESIA_ELEV), span=Math.max(0.5,hi-lo);
+  const yOf=v=>H-10-((v-lo)/span)*(H-26);
+  g.clearRect(0,0,W,H);
+  /* corner ticks */
+  CORNER_S_FRAC.forEach(f=>{ g.fillStyle='rgba(123,138,153,.20)'; g.fillRect(f*W,0,1,H); });
+  /* elevation fill + line */
+  g.beginPath(); g.moveTo(0,H);
+  for(let i=0;i<n;i++) g.lineTo(i/(n-1)*W, yOf(SILESIA_ELEV[i]));
+  g.lineTo(W,H); g.closePath(); g.fillStyle='rgba(123,138,153,.16)'; g.fill();
+  g.beginPath();
+  for(let i=0;i<n;i++){ const x=i/(n-1)*W, y=yOf(SILESIA_ELEV[i]); i?g.lineTo(x,y):g.moveTo(x,y); }
+  g.strokeStyle='#7A8A99'; g.lineWidth=2; g.stroke();
+  /* car position marker + burn/coast dot */
+  const px=(((state.s%LAP_LEN)+LAP_LEN)%LAP_LEN/LAP_LEN)*W;
+  g.fillStyle='#E8EDF2'; g.fillRect(px-1.5,0,3,H);
+  const p=state.plan?planAt(state.s):null;
+  if(p){ g.beginPath(); g.arc(px, yOf(ptAt(state.s).elev||lo), 6, 0, 7);
+         g.fillStyle=p.burn?'rgba(0,217,126,.85)':'rgba(255,170,0,.8)'; g.fill(); }
+  /* min/max labels */
+  g.fillStyle='#3D4F60'; g.font='14px JetBrains Mono';
+  g.fillText(hi.toFixed(0)+' m',6,20); g.fillText(lo.toFixed(0)+' m',6,H-8);
+}
+
 function renderPlanChart(){
   if(!state.plan) return;
   const xs=state.plan.plan.map(p=>p.s);
@@ -1636,9 +1848,10 @@ function startDemo(){
   setDot('on','Demo');
   if(demoTimer) return;
   demoTimer=setInterval(()=>{
-    for(let i=0;i<6;i++) simTick(0.2);   // 6× speed for demo
+    const sub = state.mode==='race' ? 4 : 6;   // race plays a touch slower to watch
+    for(let i=0;i<sub;i++) simTick(0.2);
     if(Math.random()<0.05) wxStep();
-    // renderStrip() already called inside handleFrame() via lapDone chain
+    renderStrip(); renderElev();                // move the position markers smoothly
   }, 200);
 }
 function stopDemo(){ clearInterval(demoTimer); demoTimer=null; }
@@ -1695,10 +1908,10 @@ window.addEventListener('load',()=>{
   renderWx();
   switchCar('thaiger7');
   state.plan = optimise(EST, WX);
-  renderPlanChart(); renderStrip(); renderTrack(); renderModel();
+  renderPlanChart(); renderStrip(); renderTrack(); renderModel(); renderElev();
   renderAttemptHistory();
   startDemo();
-  /* Attempt live weather fetch; falls back to built-in SEM 2025 data */
+  /* Attempt live weather fetch for the current date at the venue */
   fetchLiveWeather();
 });
 </script>
