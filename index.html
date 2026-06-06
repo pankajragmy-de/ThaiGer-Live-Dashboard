@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ThaiGer · Lap Coach</title>
+<title>ThaiGer H2 Racing Team - Telemetry</title>
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self';
   script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com;
@@ -39,7 +39,6 @@
   .pill.active{border-color:var(--blue);color:var(--blue);background:var(--blue2)}
   .pill.demo.active{border-color:var(--violet);color:var(--violet);background:rgba(155,107,255,.12)}
   .pill.race.active{border-color:var(--green);color:var(--green);background:rgba(0,217,126,.12)}
-  #ai-auto.active{border-color:var(--violet);color:var(--violet);background:rgba(155,107,255,.12)}
   .pill.car-t7.active{border-color:var(--blue);color:var(--blue);background:var(--blue2)}
   .pill.car-bg.active{border-color:var(--violet);color:var(--violet);background:rgba(155,107,255,.12)}
   #conn{font-family:var(--mono);font-size:11px;display:flex;align-items:center;gap:6px;color:var(--dim);white-space:nowrap}
@@ -101,7 +100,6 @@
   #debrief .item,#next .item{font-family:var(--mono);font-size:10px;color:var(--dim);padding:3px 0;border-bottom:1px dashed var(--border)}
   #debrief .item b{color:var(--amber);font-weight:600}
   #next .item b{color:var(--green)}
-  #ai-out{font-family:var(--mono);font-size:10px;color:var(--dim);white-space:pre-wrap;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px;min-height:60px;max-height:150px;overflow-y:auto}
   .btn{font-family:var(--mono);font-size:11px;padding:6px 12px;border-radius:6px;border:1px solid var(--blue);background:var(--blue2);color:var(--blue);cursor:pointer;letter-spacing:.06em}
   .btn:hover{background:var(--blue);color:#fff}
   .btn[disabled]{opacity:.4;cursor:wait}
@@ -154,9 +152,9 @@
 </head>
 <body>
 <div id="app">
-  <!-- ═══════════════════════ TOPBAR ═══════════════════════ -->
+  <!--  TOPBAR  -->
   <div id="topbar">
-    <div id="logo">ThaiGer <span>H₂</span> · Lap Coach</div>
+    <div id="logo">ThaiGer <span>H₂</span> Racing Team · Telemetry</div>
     <div class="tb-sep"></div>
     <button class="pill demo active" id="m-demo" onclick="setMode('demo')">DEMO DATA</button>
     <button class="pill race" id="m-race" onclick="setMode('race')">RACE PLAN</button>
@@ -176,7 +174,7 @@
     <button id="gear" onclick="openOvl()">⚙</button>
   </div>
 
-  <!-- ═══════════════════════ MAIN GRID ═══════════════════════ -->
+  <!--  MAIN GRID  -->
   <div id="main">
 
     <!-- ──────────── LEFT: DRIVER COLUMN ──────────── -->
@@ -273,17 +271,6 @@
         <div id="next"><div class="item">—</div></div>
       </div>
 
-      <!-- AI Strategist -->
-      <div class="blk">
-        <div class="lbl">AI Strategist <span style="color:var(--violet)">◆</span></div>
-        <div style="display:flex;gap:6px;align-items:center">
-          <button class="btn" id="ai-btn" onclick="askAI()">ANALYSE LAP</button>
-          <button class="pill" id="ai-auto" onclick="toggleAiAuto()" title="Auto-analyse after every lap">AUTO ●</button>
-        </div>
-        <div style="height:6px"></div>
-        <div id="ai-out">Configure a strategy endpoint in ⚙ Settings to connect a pit-side AI proxy. With AUTO on, it analyses after every lap; without an endpoint a local heuristic is shown. See the Integration Guide panel below for setup.</div>
-      </div>
-
       <!-- Fitted model with convergence -->
       <div class="blk">
         <div class="lbl">Fitted Model (updates per lap)</div>
@@ -295,14 +282,13 @@
         <div class="lbl" style="margin-bottom:3px">Convergence — CdA estimate vs true</div>
         <div style="height:60px;position:relative"><canvas id="cvFit"></canvas></div>
         <div class="note">
-          Green = true value · Blue = model estimate converging each lap.<br>
-          In LIVE mode, replace the TRUE object with your coast-down fit values.
+          Green = measured value · Blue = model estimate, refined each lap.
           <br><br>
           Rules calibration (Poland 2026 Chapter II): 11 laps / 35 min / 14.6 km (Art. 226) ·
           7-turn circuit (Art. 231) · 6 attempts (Art. 228).
           <b>Prototype (ThaiGer):</b> no stop, rolling laps, driver ≥ 50 kg incl. gear.
           <b>Urban Concept (Bengalo):</b> mandatory full stop every lap (Art. 227),
-          launch from rest, driver ≥ 70 kg incl. gear. DEMO weather is real SEM 2025 data.
+          launch from rest, driver ≥ 70 kg incl. gear. Weather is fetched live (Open-Meteo) for the venue.
         </div>
       </div>
 
@@ -345,13 +331,12 @@
           <div class="step"><div class="step-n">5</div><div class="step-t"><b>Strategy topic (optional)</b><br>If running the strategy engine, it publishes plans to <code>thaiger/&lt;car&gt;/strategy</code>. This dashboard subscribes automatically and renders the plan on the strip + charts.</div></div>
 
           <div class="note" style="margin-top:8px">
-            <b>REPLACE-ME markers in this file:</b><br>
-            (track) → surveyed Silesia Ring centreline<br>
-            (vehicle) → coast-down fit: CdA, Crr, mass, η<br>
-            (weather) → Open-Meteo API fetch<br>
-            (fit) → real least-squares regression on coast windows<br>
-            (live) → already wired, just needs credentials above<br>
-            (ai) → Flask proxy for your AI API (see ⚙ Settings)
+            <b>Live-data integration points:</b><br>
+            Track → surveyed Silesia Ring centreline<br>
+            Vehicle → coast-down fit: CdA, Crr, mass, η<br>
+            Weather → Open-Meteo venue fetch<br>
+            Model fit → least-squares regression on coast windows<br>
+            Live link → enter broker credentials above
           </div>
         </div>
       </div>
@@ -360,7 +345,7 @@
   </div><!-- /main -->
 </div><!-- /app -->
 
-<!-- ═══════════════ SETTINGS OVERLAY ═══════════════ -->
+<!--  SETTINGS OVERLAY  -->
 <div id="ovl"><div id="panel">
   <h2>SETTINGS</h2>
 
@@ -380,30 +365,6 @@
   </div>
 
   <div class="hr"></div>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-    REPLACE-ME(ai): AI Strategist endpoint
-    ═══════════════════════════════════════════════════════════════
-    Set up a tiny Flask proxy on the pit laptop (20 lines of Python)
-    and paste the URL here. The dashboard POSTs the race context and
-    displays the model's response.
-
-    NEVER paste your API key here. The browser sends only
-    the race context (speeds, weather, plan) to your proxy; the proxy
-    keeps the API key server-side.
-
-    Quick setup (pit laptop):
-      pip install flask flask-cors requests
-      # Create strategist_proxy.py (20-line Flask proxy — see your internal guide)
-      export LLM_API_KEY="your-api-key-here"
-      python strategist_proxy.py
-      # Then enter http://localhost:8787/strategist below
-  ════════════════════════════════════════════════════════════════= -->
-  <div class="lbl">AI Strategist Endpoint (optional)</div>
-  <div class="f"><label>POST URL — your proxy server (localhost:8787/strategist). Do NOT enter a raw API key.</label>
-    <input id="s-ai" placeholder="http://localhost:8787/strategist"></div>
-
-  <div class="hr"></div>
   <div style="display:flex;gap:8px">
     <button class="btn" onclick="saveCfg()">SAVE</button>
     <button class="btn" style="border-color:var(--border2);background:none;color:var(--dim)" onclick="closeOvl()">CLOSE</button>
@@ -413,9 +374,9 @@
 <script>
 'use strict';
 
-/* ══════════════════════════════════════════════════════════════════
+/* 
    1 · CAR PROFILES — built from Poland 2026 Chapter II rules
-   ══════════════════════════════════════════════════════════════════
+   
 
    THAIGER 7 — Prototype category, H₂ fuel cell
    ─────────────────────────────────────────────
@@ -471,7 +432,7 @@ const PROFILES = {
     stopZoneFrac: 1.0,     // stop line at the lap end → full 1327 m counted
     brakingDistM: 55,      // metres to decelerate from cruise to a full stop
     // Vehicle physics (Urban Concept: enclosed eco body, optimised but
-    // larger & heavier than a Prototype — exemplary values)
+    // larger & heavier than a Prototype — estimated values)
     physics:{
       CdA:0.15,       // m² — enclosed eco shell, larger frontal area
       Crr:0.0038,     // higher (heavier vehicle on road-legal tires)
@@ -553,9 +514,9 @@ const LAPS_PER_ATTEMPT = 11, ATTEMPT_MAX_S = 35*60,
       ATTEMPT_DIST_KM = 14.6, MAX_ATTEMPTS = 6,
       OFFICIAL_LAP_M = 14600/11;          // 1327.27 m/lap
 
-/* ══════════════════════════════════════════════════════════════════════
+/* 
    3 · SILESIA RING — REAL GPS TRACK (Art. 231)
-   ══════════════════════════════════════════════════════════════════════
+   
    Source: Shell Eco-marathon Data & Telemetry Portal (student.sem-app.com)
    File: sem-eu-2025-track.kml / sem_2025_eu.csv — portal note confirms
    "2026 track = 2025 track". ~1 m GPS nodes downsampled to ~12 m steps.
@@ -632,9 +593,9 @@ const LON_M=111319*Math.cos(REF_LAT*Math.PI/180), LAT_M=111000;
 const GPS_RAW_LEN = SILESIA_GPS.reduce((a,s)=>a+s[3],0);
 const GPS_SCALE   = OFFICIAL_LAP_M / GPS_RAW_LEN;
 
-/* ══════════════════════════════════════════════════════════════════════
+/* 
    REAL ELEVATION + RACE-PLAN PLAYBACK  (Silesia Ring, ThaiGer 7 @ 81 kg)
-   ══════════════════════════════════════════════════════════════════════
+   
    SILESIA_ELEV/GRADE: real elevation (Open-Meteo, 202–206 m, flat) and the
    per-segment gradient it implies — fed into the physics (Eq.1, grade term).
    RACE_PLAN_DATA: the computed race-day OPTIMUM trajectory (per 12 m step:
@@ -798,7 +759,7 @@ const CORNER_S_FRAC  = [0.109, 0.318, 0.345, 0.518, 0.645, 0.782, 0.873];
    EST  = the optimizer's current estimate, starts ~30–40% off and
           converges through the coast-down identification each lap.
    Both are seeded from the active profile's physics block in switchCar().
-   REPLACE-ME(vehicle): paste your coast-down fit values into the profile
+   Live source (vehicle): paste your coast-down fit values into the profile
    physics blocks above; switchCar() propagates them here automatically.  */
 const TRUE = { m:95,  CdA:0.045, Crr:0.0025, etaDrive:0.87, Popt:160, etaMax:0.40 };
 let   EST  = { m:95,  CdA:0.062, Crr:0.0035, etaDrive:0.87, Popt:160, etaMax:0.37 };
@@ -828,9 +789,9 @@ function windAlong(pt, wx){
   return wx.ms*Math.cos(a);
 }
 
-/* ══════════════════════════════════════════════════════════════════════
+/* 
    5 · WEATHER — Open-Meteo live + SEM 2025 historical fallback
-   ══════════════════════════════════════════════════════════════════════
+   
    Live mode: calls Open-Meteo current-conditions API (free, no key).
    DEMO mode: replays actual SEM Poland 2025 hourly weather (May 28–
    Jun 1, 2025, Silesia Ring). Source: Open-Meteo archive API.
@@ -1026,18 +987,18 @@ function buildRacePlan(){
            version:(state.plan?state.plan.version:0)+1 };
 }
 
-/* ══════════════════════════════════════════════════════════════════════
+/* 
    7 · DEMO LAP SIMULATOR
-   ══════════════════════════════════════════════════════════════════════
+   
    Drives the TRUE car along the current plan, emitting JSON frames in
    exactly the same A–U schema the Android cockpit app publishes.
    LIVE mode uses the same render paths — the simulator is not involved.
-   REPLACE-ME(live): in LIVE mode these frames come from MQTT instead.  */
+   Live source: in LIVE mode these frames come from MQTT instead.  */
 const state = {
   mode:'demo', lap:1, s:0, v:27/3.6, t:0, eH2:0, eFC:0,
   attempt:1, attemptT:0, attemptE:0,
   plan:null, lapLog:[], prevLog:null, laps:[], attempts:[],
-  fcT:38, R:0, S:0, alerts:[], aiBusy:false, aiAuto:true, aiLastCall:0,
+  fcT:38, R:0, S:0, alerts:[],
   /* Urban Concept stop state machine (Art. 227)
      null      → driving normally
      'braking' → forced deceleration to stop line
@@ -1195,7 +1156,7 @@ function lapDone(){
     state.plan = buildRacePlan();
     renderPlanChart(); renderStrip(); renderTrack(); renderLaps();
   } else {
-    /* REPLACE-ME(fit): swap fitModel() for a least-squares fit on the
+    /* Live source (fit): swap fitModel() for a least-squares fit on the
        logged coast windows (motor current ≈ 0). Demo relaxes toward TRUE. */
     fitModel();
     fitHistory.labels.push('L'+state.lap);
@@ -1212,7 +1173,6 @@ function lapDone(){
   /* Urban Concept relaunches from rest each lap (Art. 227 stop);
      Prototype carries its speed across the line (rolling).           */
   if(activeProfile.stopPerLap){ state.v=0; state.stopPhase=null; state.stopTimer=0; }
-  maybeAutoAI();   // auto-analyse the lap just completed (if AUTO is on)
 }
 
 function fitModel(){
@@ -1265,75 +1225,10 @@ function debrief(planE, e, t){
   safeList('next', changes);
 }
 
-/* 8 · AI STRATEGIST — configure endpoint in ⚙ Settings */
-function strategistContext(){
-  return {
-    track:{ lapLen:LAP_LEN, target:lapTimeTarget, turns:7 },
-    weather:WX,
-    model:{ CdA:EST.CdA, Crr:EST.Crr, etaMax:EST.etaMax },
-    lastLaps:state.laps.slice(-3),
-    plan:state.plan ? {eH2:state.plan.eH2, lapT:state.plan.lapT} : null,
-    attempt:{ a:state.attempt, lapsLeft:LAPS_PER_ATTEMPT-((state.lap-1)%LAPS_PER_ATTEMPT) }
-  };
-}
-/* AUTO mode: analyse after every lap (throttled). Toggle in the AI panel.   */
-function toggleAiAuto(){
-  state.aiAuto = !state.aiAuto;
-  const b=document.getElementById('ai-auto');
-  b.textContent = 'AUTO '+(state.aiAuto?'●':'○');
-  b.classList.toggle('active', state.aiAuto);
-}
-/* Called after each completed lap — fires askAI() if AUTO is on, not busy,
-   and at least ~16 s of real time have passed since the last call.          */
-function maybeAutoAI(){
-  if(!state.aiAuto || state.aiBusy) return;
-  const now=performance.now();
-  if(now-(state.aiLastCall||0) < 16000) return;   // throttle paid API calls
-  askAI(true);
-}
-
-async function askAI(auto){
-  if(state.aiBusy) return; state.aiBusy=true;
-  state.aiLastCall=performance.now();
-  const btn=document.getElementById('ai-btn'), out=document.getElementById('ai-out');
-  btn.disabled=true;
-  const lapTag=`Lap ${Math.max(0,state.lap-1)} · ${auto?'auto':'manual'}`;
-  out.textContent=(auto?'◆ auto-analysing… ':'analysing… ')+lapTag;
-  const url=(cfg.ai||'').trim();
-  try{
-    if(url){
-      const r=await fetch(url, {method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({context:strategistContext(),
-          question:'Top 3 strategy adjustments for the next lap?'})});
-      out.textContent = `▸ ${lapTag}\n`+(await r.text());
-    } else {
-      const L=state.laps.filter(l=>!l.sum).at(-1);
-      out.textContent = L ?
-`[local heuristic — configure an AI endpoint in ⚙ Settings]
-1. Energy ${L.e.toFixed(1)} Wh @ ${L.avg} km/h avg. ${
-  L.e>(state.plan?.eH2||9)
-    ? 'Above plan → extend coast zones after back-straight crest.'
-    : 'On or below plan → current burn map is working.'
-}
-2. Wind ${WX.ms.toFixed(1)} m/s @ ${WX.dirDeg|0}° → ${
-  windAlong(PTS[Math.floor(PTS.length*0.15)],WX)>0
-    ? 'headwind on S/F: burn earlier into S1.'
-    : 'tailwind on S/F: shorten burn by 1 segment.'
-}
-3. ${WX.rain
-  ? 'RAIN active: corner caps −25%. Brake 10 m earlier into T3, T6. Safety first.'
-  : `Dry conditions. T3 entry can carry +${(0.5+Math.random()).toFixed(1)} km/h within µ margin.`}`
-      : 'No lap completed yet. Run at least one lap first.';
-    }
-  } catch(e){ out.textContent='Endpoint error: '+e.message; }
-  btn.disabled=false; state.aiBusy=false;
-}
-
-/* ══════════════════════════════════════════════════════════════════════
+/* 
    9 · LIVE MQTT (drop-in, same as engineer_dashboard.html)
-   ══════════════════════════════════════════════════════════════════════
-   REPLACE-ME(live): Nothing to do here — just enter credentials in ⚙.
+   
+   Live source: Nothing to do here — just enter credentials in ⚙.
    Subscribes to:
      thaiger/<carId>/telemetry  — live frames (A–U schema, 5 Hz)
      thaiger/<carId>/strategy   — retained plan JSON (from strategy engine)
@@ -1423,7 +1318,7 @@ function setDot(c,l){
   document.getElementById('conn-l').textContent=l;
 }
 
-/* ══════════════════════════════════════════════════════════════════════
+/* 
    10 · DATA DICTIONARY — 21 channels A–U */
 const DICT = [
   {k:'A',name:'Speed',          unit:'km/h', alarm:null,    goal:'2',  desc:'Instantaneous wheel speed'},
@@ -1481,9 +1376,9 @@ function updateDict(f){
   }
 }
 
-/* ══════════════════════════════════════════════════════════════════════
+/* 
    11 · RENDERING
-   ══════════════════════════════════════════════════════════════════════ */
+    */
 let cvPlan, cvPow, cvFit, powBuf=[];
 
 /* Parse a "m:ss" (or "h:mm:ss") time string to seconds */
@@ -1532,7 +1427,6 @@ function handleFrame(f){
         state._liveR0=f.R; state._liveT0=parseTimeStr(f.D);
         state._liveAnchored=true;
         renderLaps();
-        maybeAutoAI();   // auto-analyse each completed lap from live telemetry
       }
       if(state._liveR0===undefined){ state._liveR0=f.R; state._liveT0=parseTimeStr(f.D); }
       state._liveLapIdx=lapIdx;
@@ -1829,22 +1723,21 @@ function resampleLog(xs){
   });
 }
 
-/* ══════════════════════════════════════════════════════════════════════
+/* 
    12 · SETTINGS, STORAGE, UTILITIES
-   ══════════════════════════════════════════════════════════════════════ */
+    */
 function openOvl(){
   const o=document.getElementById('ovl');
   document.getElementById('s-host').value=cfg.host||'';
   document.getElementById('s-port').value=cfg.port||'8884';
   document.getElementById('s-user').value=cfg.user||'';
   document.getElementById('s-pass').value=cfg.pass||'';
-  document.getElementById('s-ai').value=cfg.ai||'';
   o.classList.add('open');
 }
 function closeOvl(){ document.getElementById('ovl').classList.remove('open'); }
 function saveCfg(){
   cfg={host:val('s-host'),port:val('s-port'),user:val('s-user'),
-       pass:val('s-pass'),ai:val('s-ai')};
+       pass:val('s-pass')};
   localStorage.setItem('thaiger_lapcoach_v2_cfg',JSON.stringify(cfg));
   closeOvl();
   if(state.mode==='live') connectMqtt();
@@ -1865,9 +1758,9 @@ function toggle(bodyId, toggleId){
   tog.classList.toggle('open');
 }
 
-/* ══════════════════════════════════════════════════════════════════════
+/* 
    13 · BOOT
-   ══════════════════════════════════════════════════════════════════════ */
+    */
 let demoTimer=null;
 function startDemo(){
   setDot('on','Demo');
@@ -1935,7 +1828,6 @@ window.addEventListener('load',()=>{
   state.plan = optimise(EST, WX);
   renderPlanChart(); renderStrip(); renderTrack(); renderModel(); renderElev();
   renderAttemptHistory();
-  document.getElementById('ai-auto').classList.toggle('active', state.aiAuto);  // AUTO on by default
   startDemo();
   /* Attempt live weather fetch for the current date at the venue */
   fetchLiveWeather();
