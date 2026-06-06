@@ -712,125 +712,59 @@ function windAlong(pt, wx){
      The DP optimizer recalculates per-segment drag on every lap re-plan.
    Rain: µ 0.70→0.45, corner caps −25%, earlier brake/coast cues (Goal 3) */
 
-/* SEM Poland 2025 hourly data — Open-Meteo archive (120 h from 28 May) */
-const SEM_2025_WX = {
-  ws: [0.81,1.35,1.16,1.28,0.97,1.32,1.78,1.98,1.50,1.96,2.32,2.86,3.62,4.40,
-       3.42,5.10,4.20,3.40,3.18,3.18,4.25,2.60,3.40,4.07,4.41,4.21,4.17,4.05,
-       4.58,4.85,5.46,5.59,5.93,5.71,6.33,6.94,6.55,6.62,6.56,6.69,6.45,6.39,
-       5.85,4.07,3.04,1.91,2.22,2.21,2.03,2.11,1.96,1.76,1.72,1.48,1.70,2.05,
-       1.23,1.74,2.38,2.30,2.43,2.64,2.59,3.70,3.24,2.56,2.26,0.81,0.88,0.81,
-       1.50,1.80,2.15,2.25,2.10,2.11,1.75,1.44,1.82,1.34,0.99,1.37,2.25,3.05,
-       2.93,3.27,2.73,4.49,1.77,0.94,1.53,1.39,0.36,0.41,0.93,0.87,0.73,1.35,
-       1.24,0.46,0.97,1.48,1.93,1.62,1.40,1.64,1.57,1.66,1.91,3.20,2.10,2.86,
-       3.54,4.09,3.02,1.54,1.66,2.59,3.39,3.30],
-  wd: [263,248,245,239,215,189,169,164,182,212,233,234,242,238,245,268,270,272,
-       289,286,311,286,290,296,298,298,300,299,306,302,311,314,320,320,316,322,
-       324,325,328,324,322,323,323,323,324,313,301,295,280,275,274,263,253,246,
-       246,236,238,252,248,224,217,205,220,270,290,287,295,281,223,240,182,182,
-       183,180,177,187,193,200,201,225,210,237,270,271,278,304,311,251,344,295,
-       302,296,344,14,36,59,106,129,130,139,145,147,143,124,145,149,149,164,185,
-       214,198,199,209,208,243,241,196,205,211,219],
-  t:  [12.5,11.2,10.6,9.6,9.1,8.1,9.5,12.3,15.7,17.8,19.0,20.3,21.0,20.2,
-       19.1,18.9,17.5,17.0,17.4,16.9,14.7,14.3,13.8,13.4,12.8,12.2,11.8,11.6,
-       11.5,11.4,11.8,12.1,12.2,12.8,14.1,15.1,13.6,15.1,16.1,16.9,16.5,16.5,
-       15.9,15.5,14.6,12.4,11.6,10.8,9.6,10.2,9.4,7.9,7.6,8.6,9.9,11.6,13.1,
-       15.5,15.1,14.9,15.0,15.2,15.6,16.4,17.2,18.1,18.9,18.8,17.6,16.1,14.9,
-       14.4,14.1,13.4,13.0,13.5,13.1,12.6,13.8,15.9,18.1,20.7,22.5,23.5,24.5,
-       24.5,24.5,21.1,20.0,21.9,22.4,21.9,20.5,18.6,17.2,16.4,15.6,15.2,14.4,
-       13.7,13.4,13.2,14.4,16.4,19.0,21.4,23.5,25.1,26.2,25.2,24.2,25.7,26.2,
-       24.2,22.1,21.8,21.4,20.5,20.0,20.1],
-  pr: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.1,0.2,0.1,0,0,1.2,0.2,0,0,0,0,0,0.6,
-       0.3,0.8,0.1,0.2,0.3,0.7,0.1,0.4,2.1,0,0.1,0,0,0,0,0,0,0,0,0,0,0,0,0,
-       0,0,0,0,0,0,0,0.3,0.4,0.1,0.1,0,0,0,0,0,0,0.1,0,0,0,0,0,0,0,0,0,0,0,
-       0,0,0,2.0,0,0.1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.3,0,0,
-       1.4,0.3,0.1,0,0,0,0,0],
-  /* surface pressure hPa — used for air density ρ = p/(R·T) */
-  p:  [993.7,993.2,992.8,992.6,991.9,991.5,991.5,991.3,991.2,991.4,990.8,990.2,
-       989.3,988.8,988.3,987.9,987.4,987.0,986.8,986.5,986.8,987.0,987.0,987.1,
-       987.4,987.2,987.4,987.8,987.9,988.5,989.1,989.7,990.3,990.9,991.1,991.3,
-       992.2,992.7,992.8,994.0,994.1,994.4,994.5,994.4,994.5,994.9,995.4,995.6,
-       995.8,996.0,995.9,995.8,995.6,995.6,995.8,996.0,996.0,995.8,996.1,995.9,
-       996.1,995.6,995.5,996.0,995.9,995.7,995.6,995.2,995.1,995.5,995.3,995.2,
-       995.0,994.9,994.9,995.0,994.7,994.7,995.1,995.3,995.5,995.7,995.6,995.5,
-       995.3,995.2,995.0,995.6,995.2,994.4,994.4,994.2,994.3,994.6,994.5,994.4,
-       994.3,993.8,993.7,993.3,992.8,992.8,993.4,993.5,993.5,993.4,993.0,992.7,
-       992.5,992.3,991.6,991.1,990.7,990.7,990.2,990.2,989.8,990.1,990.3,990.1],
-  /* UTC hour labels for each reading (24 h per day × 5 days) */
-  label:['28May 00','28May 01','28May 02','28May 03','28May 04','28May 05',
-         '28May 06','28May 07','28May 08','28May 09','28May 10','28May 11',
-         '28May 12','28May 13','28May 14','28May 15','28May 16','28May 17',
-         '28May 18','28May 19','28May 20','28May 21','28May 22','28May 23',
-         '29May 00','29May 01','29May 02','29May 03','29May 04','29May 05',
-         '29May 06','29May 07','29May 08','29May 09','29May 10','29May 11',
-         '29May 12','29May 13','29May 14','29May 15','29May 16','29May 17',
-         '29May 18','29May 19','29May 20','29May 21','29May 22','29May 23',
-         '30May 00','30May 01','30May 02','30May 03','30May 04','30May 05',
-         '30May 06','30May 07','30May 08','30May 09','30May 10','30May 11',
-         '30May 12','30May 13','30May 14','30May 15','30May 16','30May 17',
-         '30May 18','30May 19','30May 20','30May 21','30May 22','30May 23',
-         '31May 00','31May 01','31May 02','31May 03','31May 04','31May 05',
-         '31May 06','31May 07','31May 08','31May 09','31May 10','31May 11',
-         '31May 12','31May 13','31May 14','31May 15','31May 16','31May 17',
-         '31May 18','31May 19','31May 20','31May 21','31May 22','31May 23',
-         '01Jun 00','01Jun 01','01Jun 02','01Jun 03','01Jun 04','01Jun 05',
-         '01Jun 06','01Jun 07','01Jun 08','01Jun 09','01Jun 10','01Jun 11',
-         '01Jun 12','01Jun 13','01Jun 14','01Jun 15','01Jun 16','01Jun 17',
-         '01Jun 18','01Jun 19','01Jun 20','01Jun 21','01Jun 22','01Jun 23']
-};
+/* ── WEATHER — current conditions at the venue (current date) ──
+   Primary source: Open-Meteo current-conditions API for Silesia Ring,
+   fetched live for TODAY and refreshed every 15 min. The demo applies a
+   small random drift around the latest LIVE values so the weather-adaptive
+   strategy is visible — it does NOT replay any fixed historical day.
+   If the fetch fails (offline), a neutral late-June venue default is used,
+   clearly labelled, and retried every minute.
 
-/* Start at May 29 11:00 (h=35) — gusty NW wind, 15°C dry: good race day */
-let wxHistIdx = 35;
-let WX = {};   // declared here; populated by setHistoricalWx() immediately below
+   WEATHER IMPACT ON STRATEGY (wind component per segment heading):
+     w_par = windspeed x cos(segment_heading - wind_direction)
+     Positive = headwind -> more drag; negative = tailwind -> free speed.
+   Rain: mu 0.70->0.45, corner caps -25%, earlier brake/coast cues.        */
+const VENUE = { lat:50.529, lon:18.096, name:'Silesia Ring' };
 
-function setHistoricalWx(i){
-  i = Math.max(0, Math.min(i, SEM_2025_WX.ws.length-1));
-  WX = {
-    ms:      SEM_2025_WX.ws[i],
-    dirDeg:  SEM_2025_WX.wd[i],
-    tempC:   SEM_2025_WX.t[i],
-    rain:    SEM_2025_WX.pr[i] > 0.5,
-    pressure: SEM_2025_WX.p[i],
-    source:  'SEM 2025 · ' + (SEM_2025_WX.label[i]||'h'+i)
-  };
-}
-/* Initialise from historical data */
-setHistoricalWx(wxHistIdx);
+/* neutral late-June venue default until the first live fetch returns */
+let WX = { ms:3.0, dirDeg:250, tempC:20, rain:false, pressure:1013,
+           source:'awaiting live' };
+let _wxBase = {...WX};   // latest LIVE anchor that the demo drift varies around
 
-/* Live weather fetch — Open-Meteo free API, Silesia Ring coordinates    */
 async function fetchLiveWeather(){
-  const src = document.getElementById('wx-src');
-  if(src) { src.textContent='◎ fetching…'; src.style.color='var(--amber)'; }
   try{
-    const url='https://api.open-meteo.com/v1/forecast' +
-      '?latitude=50.529&longitude=18.096' +
-      '&current=windspeed_10m,winddirection_10m,temperature_2m,precipitation,surface_pressure' +
+    const url='https://api.open-meteo.com/v1/forecast'+
+      `?latitude=${VENUE.lat}&longitude=${VENUE.lon}`+
+      '&current=windspeed_10m,winddirection_10m,temperature_2m,precipitation,surface_pressure'+
       '&wind_speed_unit=ms&timezone=Europe%2FWarsaw';
-    const d = await (await fetch(url)).json();
+    const d=await (await fetch(url)).json();
     if(!d.current) throw new Error('no current block');
-    WX = {
-      ms:      +(d.current.windspeed_10m||0).toFixed(1),
-      dirDeg:   d.current.winddirection_10m||270,
-      tempC:    d.current.temperature_2m||15,
-      rain:    (d.current.precipitation||0) > 0.1,
-      pressure: d.current.surface_pressure||1013,
-      source:  'Live · Open-Meteo'
-    };
+    const day=(d.current.time||'').slice(0,10);   // YYYY-MM-DD (current date at venue)
+    WX={ ms:+(d.current.windspeed_10m||0).toFixed(1),
+         dirDeg:d.current.winddirection_10m||270,
+         tempC:d.current.temperature_2m||18,
+         rain:(d.current.precipitation||0)>0.1,
+         pressure:d.current.surface_pressure||1013,
+         source:'Live '+(day||'today') };
+    _wxBase={...WX};
     renderWx();
-    if(src){ src.textContent='● LIVE'; src.style.color='var(--green)'; }
-    /* Reschedule every 15 minutes */
-    setTimeout(fetchLiveWeather, 15*60*1000);
+    setTimeout(fetchLiveWeather, 15*60*1000);      // refresh every 15 min
   } catch(e){
-    setHistoricalWx(wxHistIdx);
+    WX.source='offline (venue default)'; _wxBase={...WX};
     renderWx();
-    if(src){ src.textContent='◎ SEM 2025 data'; src.style.color='var(--amber)'; }
+    setTimeout(fetchLiveWeather, 60*1000);         // retry in 1 min if offline
   }
 }
 
-/* DEMO weather step: advance through SEM 2025 hourly data (1 hr per lap) */
+/* DEMO weather drift — small random walk around the latest LIVE values */
 function wxStep(){
   if(state.mode==='demo'){
-    wxHistIdx = Math.min(wxHistIdx+1, SEM_2025_WX.ws.length-1);
-    setHistoricalWx(wxHistIdx);
+    WX.ms       = Math.max(0, Math.min(12, _wxBase.ms + (Math.random()-.5)*1.5));
+    WX.dirDeg   = (_wxBase.dirDeg + (Math.random()-.5)*30 + 360)%360;
+    WX.tempC    = _wxBase.tempC + (Math.random()-.5)*1.5;
+    WX.pressure = _wxBase.pressure;
+    WX.rain     = _wxBase.rain ? (Math.random()<0.7) : (Math.random()<0.04);
+    WX.source   = _wxBase.source;
   }
   renderWx();
 }
@@ -1357,30 +1291,46 @@ function parseTimeStr(s){
 function handleFrame(f){
   updateDict(f);
 
-  /* ── LIVE alignment: derive position/lap/energy from the real frame ──
-     The cockpit app publishes cumulative distance `dist` (km) and a
-     cumulative lap counter `C`. We map them to a lap-relative position so
-     the car marker, BURN/COAST cue, target band and plan strip all advance
-     from real telemetry — exactly as they do from the simulator in DEMO. */
+  /* ── LIVE position: smooth dead-reckon from speed, anchored to dist ──
+     `dist` (cumulative km) is published at coarse ~100 m resolution, so
+     using it alone makes the car jump every ~14 s. Instead we integrate
+     position from the live speed A each frame (smooth, like the simulator)
+     and gently correct toward the dist-derived lap position to kill drift.
+     Lap boundaries (for lap logging) come from the cumulative distance. */
   if(state.mode!=='demo'){
-    if(typeof f.dist==='number'){
-      const dm=f.dist*1000;                        // km → m (cumulative)
-      const sNew=((dm%LAP_LEN)+LAP_LEN)%LAP_LEN;    // lap-relative metres
-      /* lap-boundary crossing → log the completed lap from R (FC energy) and D */
-      if(state._liveDist!==undefined && sNew < state._liveS - LAP_LEN*0.5){
+    const nowTs=(typeof f.ts==='number')?f.ts:null;
+    let dtf=0.2;
+    if(nowTs && state._liveTs) dtf=Math.min(2,Math.max(0.02,(nowTs-state._liveTs)/1000));
+    state._liveTs=nowTs;
+    const vms=Math.max(0,(f.A||0)/3.6);             // m/s
+    state.s=((state.s+vms*dtf)%LAP_LEN+LAP_LEN)%LAP_LEN;   // smooth advance
+    /* Anchor to dist ONLY when the coarse marker changes (every ~100 m) and
+       only if the dead-reckon has drifted a lot. `dist` is quantised and lags,
+       so per-frame correction would fight the smooth motion — we avoid that. */
+    if(typeof f.dist==='number' && f.dist!==state._liveDistRaw){
+      const distPos=(((f.dist*1000)%LAP_LEN)+LAP_LEN)%LAP_LEN;
+      let err=distPos-state.s;
+      if(err> LAP_LEN/2) err-=LAP_LEN;
+      if(err<-LAP_LEN/2) err+=LAP_LEN;
+      /* dead-reckon should sit 0–100 m ahead of the lagging marker; resync only
+         if we're behind it, or have over-run the 100 m window, or on first fix */
+      if(state._liveDistRaw===undefined || err>40 || err<-160) state.s=distPos;
+      /* lap-boundary from cumulative distance → log the completed lap */
+      const lapIdx=Math.floor(f.dist*1000/LAP_LEN);
+      if(state._liveLapIdx!==undefined && lapIdx>state._liveLapIdx){
         const lapFCWh=Math.max(0,(f.R-(state._liveR0??f.R))/3600);
-        const etaFC=Math.max(0.2,(f.T||70)/100);
-        const lapH2=lapFCWh/etaFC;                  // H₂-equivalent Wh
+        const lapH2=lapFCWh/Math.max(0.2,(f.T||70)/100);
         const lapSec=Math.max(1,parseTimeStr(f.D)-(state._liveT0??parseTimeStr(f.D)));
         const li=((Math.max(1,f.C)-1)%LAPS_PER_ATTEMPT)+1;
         state.laps.push({n:li, t:+lapSec.toFixed(1), e:+lapH2.toFixed(2),
           h2:+(lapH2/LHV_WH_PER_L).toFixed(2), avg:+(LAP_LEN/lapSec*3.6).toFixed(1)});
         state._liveR0=f.R; state._liveT0=parseTimeStr(f.D);
-        state._liveAnchored=true;   // baseline now at a real lap start
+        state._liveAnchored=true;
         renderLaps();
       }
       if(state._liveR0===undefined){ state._liveR0=f.R; state._liveT0=parseTimeStr(f.D); }
-      state._liveS=sNew; state._liveDist=f.dist; state.s=sNew;
+      state._liveLapIdx=lapIdx;
+      state._liveDistRaw=f.dist;
     }
     if(typeof f.C==='number'){
       state.lap=Math.max(1,f.C);
@@ -1455,6 +1405,9 @@ function handleFrame(f){
   document.getElementById('lapclock').textContent=
     `A${state.attempt}/${MAX_ATTEMPTS} · L${liveLi}/${LAPS_PER_ATTEMPT} · ${clkTime} / 35:00`;
   drawCar();
+  /* LIVE: redraw the plan strip each frame so its position marker advances
+     (in DEMO the demo timer already calls renderStrip) */
+  if(state.mode!=='demo') renderStrip();
 }
 
 function cue(p){
@@ -1539,11 +1492,12 @@ function renderWx(){
   document.getElementById('wx-temp').textContent=WX.tempC.toFixed(0)+'°C';
   document.getElementById('wx-rain').innerHTML=
     WX.rain?'<span class="wet">RAIN▲</span>':'dry';
-  /* Update source badge if the element exists */
+  /* Source badge: green when live (current date), amber otherwise */
   const src=document.getElementById('wx-src');
-  if(src && WX.source && !WX.source.startsWith('Live')){
-    src.textContent='◎ '+WX.source;
-    src.style.color='var(--amber)';
+  if(src && WX.source){
+    const live=WX.source.startsWith('Live');
+    src.textContent=(live?'● ':'◎ ')+WX.source;
+    src.style.color=live?'var(--green)':'var(--amber)';
   }
 }
 
