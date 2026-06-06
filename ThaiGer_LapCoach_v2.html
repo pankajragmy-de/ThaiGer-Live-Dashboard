@@ -39,6 +39,7 @@
   .pill.active{border-color:var(--blue);color:var(--blue);background:var(--blue2)}
   .pill.demo.active{border-color:var(--violet);color:var(--violet);background:rgba(155,107,255,.12)}
   .pill.race.active{border-color:var(--green);color:var(--green);background:rgba(0,217,126,.12)}
+  #ai-auto.active{border-color:var(--violet);color:var(--violet);background:rgba(155,107,255,.12)}
   .pill.car-t7.active{border-color:var(--blue);color:var(--blue);background:var(--blue2)}
   .pill.car-bg.active{border-color:var(--violet);color:var(--violet);background:rgba(155,107,255,.12)}
   #conn{font-family:var(--mono);font-size:11px;display:flex;align-items:center;gap:6px;color:var(--dim);white-space:nowrap}
@@ -275,9 +276,12 @@
       <!-- AI Strategist -->
       <div class="blk">
         <div class="lbl">AI Strategist <span style="color:var(--violet)">◆</span></div>
-        <button class="btn" id="ai-btn" onclick="askAI()">ANALYSE LAST LAP</button>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn" id="ai-btn" onclick="askAI()">ANALYSE LAP</button>
+          <button class="pill" id="ai-auto" onclick="toggleAiAuto()" title="Auto-analyse after every lap">AUTO ●</button>
+        </div>
         <div style="height:6px"></div>
-        <div id="ai-out">Configure a strategy endpoint in ⚙ Settings to connect a pit-side AI proxy. Without one, a local heuristic summary is shown. See the Integration Guide panel below for setup instructions.</div>
+        <div id="ai-out">Configure a strategy endpoint in ⚙ Settings to connect a pit-side AI proxy. With AUTO on, it analyses after every lap; without an endpoint a local heuristic is shown. See the Integration Guide panel below for setup.</div>
       </div>
 
       <!-- Fitted model with convergence -->
@@ -1033,7 +1037,7 @@ const state = {
   mode:'demo', lap:1, s:0, v:27/3.6, t:0, eH2:0, eFC:0,
   attempt:1, attemptT:0, attemptE:0,
   plan:null, lapLog:[], prevLog:null, laps:[], attempts:[],
-  fcT:38, R:0, S:0, alerts:[], aiBusy:false,
+  fcT:38, R:0, S:0, alerts:[], aiBusy:false, aiAuto:true, aiLastCall:0,
   /* Urban Concept stop state machine (Art. 227)
      null      → driving normally
      'braking' → forced deceleration to stop line
@@ -1208,6 +1212,7 @@ function lapDone(){
   /* Urban Concept relaunches from rest each lap (Art. 227 stop);
      Prototype carries its speed across the line (rolling).           */
   if(activeProfile.stopPerLap){ state.v=0; state.stopPhase=null; state.stopTimer=0; }
+  maybeAutoAI();   // auto-analyse the lap just completed (if AUTO is on)
 }
 
 function fitModel(){
@@ -1271,10 +1276,29 @@ function strategistContext(){
     attempt:{ a:state.attempt, lapsLeft:LAPS_PER_ATTEMPT-((state.lap-1)%LAPS_PER_ATTEMPT) }
   };
 }
-async function askAI(){
+/* AUTO mode: analyse after every lap (throttled). Toggle in the AI panel.   */
+function toggleAiAuto(){
+  state.aiAuto = !state.aiAuto;
+  const b=document.getElementById('ai-auto');
+  b.textContent = 'AUTO '+(state.aiAuto?'●':'○');
+  b.classList.toggle('active', state.aiAuto);
+}
+/* Called after each completed lap — fires askAI() if AUTO is on, not busy,
+   and at least ~16 s of real time have passed since the last call.          */
+function maybeAutoAI(){
+  if(!state.aiAuto || state.aiBusy) return;
+  const now=performance.now();
+  if(now-(state.aiLastCall||0) < 16000) return;   // throttle paid API calls
+  askAI(true);
+}
+
+async function askAI(auto){
   if(state.aiBusy) return; state.aiBusy=true;
+  state.aiLastCall=performance.now();
   const btn=document.getElementById('ai-btn'), out=document.getElementById('ai-out');
-  btn.disabled=true; out.textContent='thinking…';
+  btn.disabled=true;
+  const lapTag=`Lap ${Math.max(0,state.lap-1)} · ${auto?'auto':'manual'}`;
+  out.textContent=(auto?'◆ auto-analysing… ':'analysing… ')+lapTag;
   const url=(cfg.ai||'').trim();
   try{
     if(url){
@@ -1282,7 +1306,7 @@ async function askAI(){
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({context:strategistContext(),
           question:'Top 3 strategy adjustments for the next lap?'})});
-      out.textContent = await r.text();
+      out.textContent = `▸ ${lapTag}\n`+(await r.text());
     } else {
       const L=state.laps.filter(l=>!l.sum).at(-1);
       out.textContent = L ?
@@ -1508,6 +1532,7 @@ function handleFrame(f){
         state._liveR0=f.R; state._liveT0=parseTimeStr(f.D);
         state._liveAnchored=true;
         renderLaps();
+        maybeAutoAI();   // auto-analyse each completed lap from live telemetry
       }
       if(state._liveR0===undefined){ state._liveR0=f.R; state._liveT0=parseTimeStr(f.D); }
       state._liveLapIdx=lapIdx;
@@ -1910,6 +1935,7 @@ window.addEventListener('load',()=>{
   state.plan = optimise(EST, WX);
   renderPlanChart(); renderStrip(); renderTrack(); renderModel(); renderElev();
   renderAttemptHistory();
+  document.getElementById('ai-auto').classList.toggle('active', state.aiAuto);  // AUTO on by default
   startDemo();
   /* Attempt live weather fetch for the current date at the venue */
   fetchLiveWeather();
