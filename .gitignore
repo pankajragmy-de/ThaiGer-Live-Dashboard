@@ -29,6 +29,10 @@ figures/
 
 # Raw source data (contains personal name) — keep local
 *.odt
+*.docx
+
+# Strategy calculator + figures — vehicle model detail stays private
+resources/
 
 # IDE
 .idea/
