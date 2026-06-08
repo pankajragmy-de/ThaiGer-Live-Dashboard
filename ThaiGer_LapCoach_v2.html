@@ -405,20 +405,25 @@ const PROFILES = {
     // Art. 227: Prototype does NOT have the compulsory-stop rule
     stopPerLap: false,
     stopTimeSec: 0,
-    // Vehicle physics — conservative pre-measurement estimates (coast-down TBD)
+    // Vehicle physics — calibrated from 2025 official attempt energy balance
     physics:{
-      CdA:0.064,      // m² — conservative drag-area estimate
-      Crr:0.0032,     // rolling resistance (conservative)
-      etaDrive:0.87,  // drivetrain efficiency
-      Popt:150,       // W — FC power at peak efficiency
-      etaMax:0.40     // peak H₂→wheel system efficiency
+      CdA:0.050,      // m² — identified from 2025 energy balance
+      Crr:0.0040,     // rolling resistance (2025 coast-down estimate)
+      etaDrive:0.93,  // drivetrain efficiency
+      Popt:150,       // W — FC power at peak η_sys
+      etaMax:0.60     // peak H₂→wheel system efficiency at Popt (2026 cooling target)
     },
-    // FC burn set-points (eco burst, no launch boost on rolling laps)
-    pCruise:150, pLaunch:150,  // Popt = 150 W (peak eta_FC)
-    // Pace target (s): 190 s = 25.1 km/h avg = 13 s total margin (2026 optimised, Popt=150 W)
+    // FC burn set-points (same power for cruise and standing-start run-up)
+    pCruise:150, pLaunch:150,  // Popt = 150 W (peak eta_sys)
+    // Rolling laps 2–11: 190 s = 25.1 km/h; 11-lap total ≈ 2071 s → +29 s margin
     lapTimeTarget: 190,
-    // Initial speed for DP forward pass: rolling start from prev lap
-    startSpeedMS: 25/3.6  // rolling start at 25 km/h
+    // Lap 1 standing start: car burns continuously ~45 m from rest until pace speed,
+    // then follows the same DP plan. Completes ~180 s (9 s faster than rolling
+    // due to higher average speed during the run-up phase).
+    lapTimeTargetL1: 180,
+    launchDistL1: 45,           // m — full-burn run-up zone from rest
+    // Lap 1 starts from rest; laps 2–11 carry over the finish-line speed
+    startSpeedMS: 0.1           // m/s — standing start (effectively from rest)
   },
   bengalo: {
     name:'BENGALO', category:'Urban Concept · H₂', color:'#9B6BFF',
@@ -491,7 +496,7 @@ function switchCar(key){
   state.stopPhase=null; state.stopTimer=0; state.alerts=[];
   fitHistory.est=[]; fitHistory.true_=[]; fitHistory.labels=[];
 
-  state.plan = optimise(EST, WX);
+  state.plan = optimise(EST, WX, 0.1);  // Lap 1: standing start from rest
   renderPlanChart(); renderStrip(); renderTrack();
   renderLaps(); renderModel(); renderFitChart(); renderAttemptHistory();
   document.getElementById('alerts').innerHTML='';
@@ -805,16 +810,22 @@ function nearestV(v){
   }
   return b;
 }
-function solveDP(lambda, M, wx){
+function solveDP(lambda, M, wx, startV){
   const N=VGRID.length, INF=1e15;
   let J=new Float64Array(N);
   const act=[], usedP=[];
   const isUC = activeProfile.stopPerLap;
+  /* Start speed: UC always from rest; Prototype from rest on Lap 1, carry-over on 2–11 */
+  const v0 = (startV !== undefined) ? Math.max(0.1, startV)
+           : (isUC ? 0.1 : 27/3.6);
+  /* Launch zone: UC stop-recovery zone; Prototype only when starting from rest (Lap 1) */
+  const launchD = isUC ? LAUNCH_DIST
+                : (v0 < 1.0 ? (activeProfile.launchDistL1 || 45) : 0);
 
   for(let k=NSTEP-1;k>=0;k--){
     const pt=ptAt(k*DS), cap=vCap(pt,wx);
     const Jn=new Float64Array(N).fill(INF), An=new Uint8Array(N), Pn=new Uint8Array(N);
-    const P_s = isUC && k*DS < LAUNCH_DIST ? pLaunch() : pCruise();
+    const P_s = k*DS < launchD ? pLaunch() : pCruise();
     for(let i=0;i<N;i++){
       const v=VGRID[i]; if(v>cap+1e-6){Jn[i]=INF;continue;}
       for(const burn of [1,0]){
@@ -827,29 +838,34 @@ function solveDP(lambda, M, wx){
     }
     J=Jn; act.unshift(An); usedP.unshift(Pn);
   }
-  /* Forward pass — Urban Concept starts from rest after stop (Art. 227) */
-  let v = isUC ? 0.1 : 27/3.6, t=0, e=0;
+  /* Forward pass — Lap 1 and UC start from rest; laps 2–11 carry over finish-line speed */
+  let v = v0, t=0, e=0;
   const plan=[];
   for(let k=0;k<NSTEP;k++){
     const pt=ptAt(k*DS), cap=vCap(pt,wx);
-    const P_s = isUC && k*DS < LAUNCH_DIST ? pLaunch() : pCruise();
+    const P_s = k*DS < launchD ? pLaunch() : pCruise();
     v=Math.min(v,cap);
-    /* Near V_MIN or in launch zone: always burn */
-    const burn = (v<=V_MIN+0.3 || (isUC && k*DS < LAUNCH_DIST)) ? 1 : act[k][nearestV(v)];
+    /* Near V_MIN or inside launch zone: always burn */
+    const burn = (v<=V_MIN+0.3 || k*DS < launchD) ? 1 : act[k][nearestV(v)];
     const r=stepDyn(v, burn?P_s:0, pt, M, wx);
     plan.push({s:k*DS, burn:!!burn, vT:v*3.6, cap:cap*3.6,
-               launch: isUC && k*DS < LAUNCH_DIST});
+               launch: k*DS < launchD});
     v=Math.min(r.v2,cap); t+=r.dt; e+=r.eH2;
   }
   return {plan, lapT:t, eH2:e};
 }
 
-function optimise(M, wx){
-  const target = lapTimeTarget;
+function optimise(M, wx, startV){
+  /* startV < 1 m/s → standing-start Lap 1: use 180 s target and launch zone.
+     startV ≥ 1 m/s (or omitted) → rolling lap: use 190 s target, no launch zone. */
+  const isStanding = (startV !== undefined && startV < 1.0);
+  const target = isStanding
+    ? (activeProfile.lapTimeTargetL1 || lapTimeTarget)
+    : lapTimeTarget;
   let lo=0, hi=4.0;
-  let best=solveDP(hi, M, wx);
+  let best=solveDP(hi, M, wx, startV);
   for(let it=0; it<16; it++){
-    const mid=(lo+hi)/2, r=solveDP(mid, M, wx);
+    const mid=(lo+hi)/2, r=solveDP(mid, M, wx, startV);
     if(r.lapT>target) lo=mid;
     else { hi=mid; best=r; }
   }
@@ -884,7 +900,7 @@ function buildRacePlan(){
    LIVE mode uses the same render paths — the simulator is not involved.
    Live source: in LIVE mode these frames come from MQTT instead.  */
 const state = {
-  mode:'demo', lap:1, s:0, v:27/3.6, t:0, eH2:0, eFC:0,
+  mode:'demo', lap:1, s:0, v:0.1, t:0, eH2:0, eFC:0,
   attempt:1, attemptT:0, attemptE:0,
   plan:null, lapLog:[], prevLog:null, laps:[], attempts:[],
   fcT:38, R:0, S:0, alerts:[],
@@ -1041,8 +1057,8 @@ function lapDone(){
   debrief(planE, e, t);
 
   if(state.mode==='race'){
-    /* RACE PLAN: keep replaying the same embedded optimum (no re-fit/replan) */
-    state.plan = buildRacePlan();
+    /* RACE PLAN: recompute at race-day conditions with carry-over speed (laps 2–11 rolling) */
+    state.plan = optimise(TRUE, RACE_DAY_WX, state.v);
     renderPlanChart(); renderStrip(); renderTrack(); renderLaps();
   } else {
     /* Live source (fit): swap fitModel() for a least-squares fit on the
@@ -1052,7 +1068,7 @@ function lapDone(){
     fitHistory.est.push(+EST.CdA.toFixed(4));
     fitHistory.true_.push(TRUE.CdA);
     if(WX.rain) addAlert('WET MODE — corner caps derated −25%', false, true);
-    state.plan = optimise(EST, WX);   // re-plan for lap N+1
+    state.plan = optimise(EST, WX, state.v);   // re-plan with carry-over speed
     renderPlanChart(); renderStrip(); renderTrack();
     renderLaps(); renderModel(); renderFitChart();
   }
@@ -1140,10 +1156,10 @@ function setMode(m){
        Use the Prototype profile, race-day conditions, and reset the run. */
     switchCar('thaiger7');
     WX={...RACE_DAY_WX}; _wxBase={...RACE_DAY_WX}; renderWx();
-    state.lap=1; state.s=0; state.t=0; state.eH2=0; state.eFC=0; state.v=27/3.6;
+    state.lap=1; state.s=0; state.t=0; state.eH2=0; state.eFC=0; state.v=0.1;
     state.attempt=1; state.attemptT=0; state.attemptE=0;
     state.laps=[]; state.attempts=[]; state.lapLog=[]; state.prevLog=null;
-    state.plan=buildRacePlan();
+    state.plan=optimise(TRUE, RACE_DAY_WX, 0.1);  // Lap 1: standing start, race-day conditions
     renderPlanChart(); renderStrip(); renderTrack(); renderElev();
     renderLaps(); renderAttemptHistory();
     setDot('on','Race plan'); startDemo();   // demo timer drives simTick (race branch)
@@ -1714,7 +1730,7 @@ window.addEventListener('load',()=>{
   buildDictTable();
   renderWx();
   switchCar('thaiger7');
-  state.plan = optimise(EST, WX);
+  state.plan = optimise(EST, WX, 0.1);  // Lap 1: standing start from rest
   renderPlanChart(); renderStrip(); renderTrack(); renderModel(); renderElev();
   renderAttemptHistory();
   startDemo();
