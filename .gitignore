@@ -1,6 +1,9 @@
 # Claude Code internal files
 .claude/
 
+# v2 development file — internal only; index.html is the canonical public entry point
+ThaiGer_LapCoach_v2.html
+
 # Internal documents — not for public repo
 SEM-Poland-2026_DataTelemetry_APPLICATION-FINAL.tex
 ThaiGer_SEM2026_Finalization_Guide.md

@@ -191,7 +191,7 @@
         <div class="lbl">Speed · Target Band</div>
         <div><span id="spd" class="ok">—</span><span class="unit"> km/h</span></div>
         <div id="band"><div id="band-t"></div><div id="band-v"></div></div>
-        <div class="band-lab"><span id="band-lo">20</span><span id="band-hi">36</span></div>
+        <div class="band-lab"><span id="band-lo">25</span><span id="band-hi">38</span></div>
       </div>
 
       <div class="blk">
@@ -405,20 +405,25 @@ const PROFILES = {
     // Art. 227: Prototype does NOT have the compulsory-stop rule
     stopPerLap: false,
     stopTimeSec: 0,
-    // Vehicle physics — conservative pre-measurement estimates (coast-down TBD)
+    // Vehicle physics — calibrated from 2025 official attempt energy balance
     physics:{
-      CdA:0.064,      // m² — conservative drag-area estimate
-      Crr:0.0032,     // rolling resistance (conservative)
-      etaDrive:0.87,  // drivetrain efficiency
-      Popt:150,       // W — FC power at peak efficiency
-      etaMax:0.40     // peak H₂→wheel system efficiency
+      CdA:0.050,      // m² — identified from 2025 energy balance
+      Crr:0.0040,     // rolling resistance (2025 coast-down estimate)
+      etaDrive:0.93,  // drivetrain efficiency
+      Popt:150,       // W — FC power at peak η_sys
+      etaMax:0.60     // peak H₂→wheel system efficiency at Popt (2026 cooling target)
     },
-    // FC burn set-points (eco burst, no launch boost on rolling laps)
-    pCruise:170, pLaunch:170,
-    // DP lap-time target (s): plan to 178 s → ~2.3 min margin under 35-min cap
-    lapTimeTarget: 178,
-    // Initial speed for DP forward pass: rolling start from prev lap
-    startSpeedMS: 27/3.6
+    // FC burn set-points (same power for cruise and standing-start run-up)
+    pCruise:150, pLaunch:150,  // Popt = 150 W (peak eta_sys)
+    // Rolling laps 2–11: 190 s = 25.1 km/h; 11-lap total ≈ 2071 s → +29 s margin
+    lapTimeTarget: 190,
+    // Lap 1 standing start: car burns continuously ~45 m from rest until pace speed,
+    // then follows the same DP plan. Completes ~180 s (9 s faster than rolling
+    // due to higher average speed during the run-up phase).
+    lapTimeTargetL1: 180,
+    launchDistL1: 45,           // m — full-burn run-up zone from rest
+    // Lap 1 starts from rest; laps 2–11 carry over the finish-line speed
+    startSpeedMS: 0.1           // m/s — standing start (effectively from rest)
   },
   bengalo: {
     name:'BENGALO', category:'Urban Concept · H₂', color:'#9B6BFF',
@@ -491,7 +496,7 @@ function switchCar(key){
   state.stopPhase=null; state.stopTimer=0; state.alerts=[];
   fitHistory.est=[]; fitHistory.true_=[]; fitHistory.labels=[];
 
-  state.plan = optimise(EST, WX);
+  state.plan = optimise(EST, WX, 0.1);  // Lap 1: standing start from rest
   renderPlanChart(); renderStrip(); renderTrack();
   renderLaps(); renderModel(); renderFitChart(); renderAttemptHistory();
   document.getElementById('alerts').innerHTML='';
@@ -605,118 +610,7 @@ const GPS_SCALE   = OFFICIAL_LAP_M / GPS_RAW_LEN;
    4.67 Wh/lap, ~853 km/m³.                              */
 const SILESIA_ELEV = [204.4,204.6,204.8,205.0,205.0,205.0,205.0,205.0,205.0,205.0,205.2,205.2,205.2,205.2,205.2,205.0,205.0,205.0,205.0,205.0,205.0,205.0,205.0,204.8,204.6,204.4,204.2,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,203.8,203.6,203.4,203.2,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,202.8,202.6,202.4,202.2,202.0,202.0,202.0,202.0,202.0,202.0,202.0,202.2,202.4,202.6,202.8,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.2,203.4,203.6,203.8,204.0,204.0,204.0,204.0,204.2];
 const SILESIA_GRADE = [1.66,1.66,1.66,0.0,0.0,0.0,0.0,0.0,0.0,1.66,0.0,0.0,0.0,0.0,-1.66,0.0,0.0,0.0,0.0,0.0,0.0,0.0,-1.66,-1.66,-1.66,-1.66,-1.66,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,-1.66,-1.66,-1.66,-1.66,-1.66,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,-1.66,-1.66,-1.66,-1.66,-1.66,0.0,0.0,0.0,0.0,0.0,0.0,1.66,1.66,1.66,1.66,1.66,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.66,1.66,1.66,1.66,1.66,0.0,0.0,0.0,1.66,1.52];
-const RACE_PLAN_DATA = [
-  [0,25.0,1,170.0],
-  [12,25.4,1,170.0],
-  [24,25.7,1,170.0],
-  [36,26.1,1,170.0],
-  [48,27.3,0,0],
-  [60,27.1,0,0],
-  [72,26.9,0,0],
-  [84,26.6,0,0],
-  [96,26.4,0,0],
-  [108,26.2,1,170.0],
-  [120,26.4,1,170.0],
-  [132,27.6,1,170.0],
-  [144,28.6,1,170.0],
-  [156,29.5,1,170.0],
-  [168,30.3,0,0],
-  [180,30.7,0,0],
-  [192,30.3,0,0],
-  [204,29.7,0,0],
-  [216,29.3,0,0],
-  [228,28.8,0,0],
-  [240,28.3,0,0],
-  [252,27.7,1,170.0],
-  [264,28.6,0,0],
-  [276,28.9,0,0],
-  [288,29.3,0,0],
-  [300,29.6,0,0],
-  [312,30.0,0,0],
-  [324,30.3,0,0],
-  [336,29.8,0,0],
-  [348,29.3,0,0],
-  [360,28.8,0,0],
-  [372,28.3,0,0],
-  [384,27.8,1,170.0],
-  [396,28.6,0,0],
-  [408,28.1,1,170.0],
-  [420,28.9,0,0],
-  [432,28.4,1,170.0],
-  [444,29.2,1,170.0],
-  [456,29.9,0,0],
-  [468,29.4,0,0],
-  [480,28.9,0,0],
-  [492,28.4,0,0],
-  [504,27.9,1,170.0],
-  [516,28.7,1,170.0],
-  [528,29.4,0,0],
-  [540,28.9,0,0],
-  [552,28.4,1,170.0],
-  [564,29.2,0,0],
-  [576,28.7,0,0],
-  [588,28.2,0,0],
-  [600,28.6,0,0],
-  [612,28.9,0,0],
-  [624,29.3,0,0],
-  [636,29.7,0,0],
-  [648,30.0,0,0],
-  [660,29.5,0,0],
-  [672,29.0,0,0],
-  [684,28.5,1,170.0],
-  [696,29.3,1,170.0],
-  [708,30.1,1,170.0],
-  [720,30.9,0,0],
-  [732,30.6,1,170.0],
-  [744,31.3,0,0],
-  [756,31.1,0,0],
-  [768,30.8,0,0],
-  [780,30.5,0,0],
-  [792,30.2,0,0],
-  [804,30.7,0,0],
-  [816,31.2,0,0],
-  [828,31.7,0,0],
-  [840,32.2,0,0],
-  [852,32.7,0,0],
-  [864,32.4,0,0],
-  [876,32.2,0,0],
-  [888,32.0,0,0],
-  [900,31.8,0,0],
-  [912,31.5,0,0],
-  [924,31.3,0,0],
-  [936,30.2,0,0],
-  [948,29.2,0,0],
-  [960,28.0,0,0],
-  [972,26.9,0,0],
-  [984,25.7,0,0],
-  [996,25.4,0,0],
-  [1008,25.2,0,0],
-  [1020,24.9,0,0],
-  [1032,24.7,0,0],
-  [1044,24.4,0,0],
-  [1056,24.2,0,0],
-  [1068,24.0,0,0],
-  [1080,23.7,0,0],
-  [1092,23.5,0,0],
-  [1104,23.2,0,0],
-  [1116,22.9,0,0],
-  [1128,22.6,0,0],
-  [1140,22.3,0,0],
-  [1152,22.0,0,0],
-  [1164,21.7,0,0],
-  [1176,21.5,0,0],
-  [1188,21.3,0,0],
-  [1200,21.0,0,0],
-  [1212,19.5,0,0],
-  [1224,17.9,1,170.0],
-  [1236,19.3,0,0],
-  [1248,17.7,1,170.0],
-  [1260,19.2,0,0],
-  [1272,18.9,0,0],
-  [1284,18.6,0,0],
-  [1296,18.3,0,0],
-  [1308,16.6,1,170.0]
-];   // [s_m, v_kmh, burn, P_W] per 12 m step
+const RACE_PLAN_DATA = [[0,25.15,0,0],[12,24.87,1,150],[24,26.13,0,0],[36,25.86,0,0],[48,25.59,0,0],[60,25.32,0,0],[72,25.05,0,0],[84,24.77,0,0],[96,24.5,0,0],[108,24.21,0,0],[120,23.91,1,150],[132,25.25,1,150],[144,26.41,1,150],[156,27.43,0,0],[168,27.04,0,0],[180,26.63,0,0],[192,26.16,0,0],[204,25.67,0,0],[216,25.19,0,0],[228,24.7,0,0],[240,24.21,0,0],[252,23.7,0,0],[264,23.19,0,0],[276,22.68,1,150],[288,24.0,1,150],[300,25.15,1,150],[312,26.16,1,150],[324,27.06,1,150],[336,27.89,0,0],[348,27.4,0,0],[360,26.92,0,0],[372,26.43,0,0],[384,25.94,0,0],[396,25.45,0,0],[408,24.96,0,0],[420,24.46,0,0],[432,23.96,0,0],[444,23.49,0,0],[456,23.02,1,150],[468,24.31,0,0],[480,23.8,0,0],[492,23.3,1,150],[504,24.53,1,150],[516,25.62,1,150],[528,26.58,1,150],[540,27.46,0,0],[552,26.98,0,0],[564,26.5,0,0],[576,26.01,0,0],[588,25.52,0,0],[600,25.03,0,0],[612,24.54,0,0],[624,24.04,0,0],[636,23.53,0,0],[648,23.02,1,150],[660,24.3,1,150],[672,25.42,1,150],[684,26.43,0,0],[696,25.99,0,0],[708,25.59,0,0],[720,25.22,0,0],[732,24.87,0,0],[744,24.54,0,0],[756,24.21,0,0],[768,23.88,1,150],[780,25.2,1,150],[792,26.36,1,150],[804,27.41,0,0],[816,27.09,0,0],[828,26.77,0,0],[840,26.45,0,0],[852,26.12,0,0],[864,25.82,0,0],[876,25.54,0,0],[888,25.27,0,0],[900,25.01,0,0],[912,24.73,0,0],[924,24.45,0,0],[936,24.16,0,0],[948,23.87,0,0],[960,23.58,0,0],[972,23.29,0,0],[984,22.99,1,150],[996,24.47,1,150],[1008,25.76,1,150],[1020,26.9,1,150],[1032,27.95,0,0],[1044,27.69,0,0],[1056,27.43,0,0],[1068,27.18,0,0],[1080,26.91,0,0],[1092,26.63,0,0],[1104,26.33,0,0],[1116,26.02,0,0],[1128,25.7,0,0],[1140,25.38,0,0],[1152,25.07,0,0],[1164,24.79,0,0],[1176,24.52,0,0],[1188,24.25,0,0],[1200,23.97,0,0],[1212,23.69,0,0],[1224,23.4,0,0],[1236,23.12,1,150],[1248,24.59,0,0],[1260,24.31,0,0],[1272,24.03,0,0],[1284,23.75,0,0],[1296,23.47,0,0],[1308,23.18,1,150]];   // [s_m, v_kmh, burn, P_W] per 12 m step
 
 
 /* PTS — per-point screen coords, heading, curvature for physics & render */
@@ -775,7 +669,7 @@ function etaSys(P, M){
   const d=(P-M.Popt)/M.Popt;
   return Math.max(0.12, M.etaMax - 0.18*d*d);   // bell-shaped efficiency map
 }
-const V_MIN=20/3.6, V_MAX=38/3.6;
+const V_MIN=25/3.6, V_MAX=38/3.6;  // 25 km/h validity floor (Art. 226 / report eq. 2)
 
 /* Corner speed cap: v ≤ √(µ·g·r)  — rain derates µ (goal 3: rain & wind) */
 function vCap(pt, wx){
@@ -870,7 +764,7 @@ function wxStep(){
 
 /* 6 · STRATEGY ENGINE
    Lap time target is profile-dependent (set by switchCar):
-   • ThaiGer  (Prototype):      lapTimeTarget = 186 s
+   • ThaiGer  (Prototype):      lapTimeTarget = 190 s  (2026 pace-optimised; 13 s margin)
      → no stop overhead, pure driving budget.
    • Bengalo  (Urban Concept):  lapTimeTarget = 166 s
      → budget = 190.9 s − stop cycle overhead (~25 s: decel+hold+accel)
@@ -916,16 +810,22 @@ function nearestV(v){
   }
   return b;
 }
-function solveDP(lambda, M, wx){
+function solveDP(lambda, M, wx, startV){
   const N=VGRID.length, INF=1e15;
   let J=new Float64Array(N);
   const act=[], usedP=[];
   const isUC = activeProfile.stopPerLap;
+  /* Start speed: UC always from rest; Prototype from rest on Lap 1, carry-over on 2–11 */
+  const v0 = (startV !== undefined) ? Math.max(0.1, startV)
+           : (isUC ? 0.1 : 27/3.6);
+  /* Launch zone: UC stop-recovery zone; Prototype only when starting from rest (Lap 1) */
+  const launchD = isUC ? LAUNCH_DIST
+                : (v0 < 1.0 ? (activeProfile.launchDistL1 || 45) : 0);
 
   for(let k=NSTEP-1;k>=0;k--){
     const pt=ptAt(k*DS), cap=vCap(pt,wx);
     const Jn=new Float64Array(N).fill(INF), An=new Uint8Array(N), Pn=new Uint8Array(N);
-    const P_s = isUC && k*DS < LAUNCH_DIST ? pLaunch() : pCruise();
+    const P_s = k*DS < launchD ? pLaunch() : pCruise();
     for(let i=0;i<N;i++){
       const v=VGRID[i]; if(v>cap+1e-6){Jn[i]=INF;continue;}
       for(const burn of [1,0]){
@@ -938,29 +838,34 @@ function solveDP(lambda, M, wx){
     }
     J=Jn; act.unshift(An); usedP.unshift(Pn);
   }
-  /* Forward pass — Urban Concept starts from rest after stop (Art. 227) */
-  let v = isUC ? 0.1 : 27/3.6, t=0, e=0;
+  /* Forward pass — Lap 1 and UC start from rest; laps 2–11 carry over finish-line speed */
+  let v = v0, t=0, e=0;
   const plan=[];
   for(let k=0;k<NSTEP;k++){
     const pt=ptAt(k*DS), cap=vCap(pt,wx);
-    const P_s = isUC && k*DS < LAUNCH_DIST ? pLaunch() : pCruise();
+    const P_s = k*DS < launchD ? pLaunch() : pCruise();
     v=Math.min(v,cap);
-    /* Near V_MIN or in launch zone: always burn */
-    const burn = (v<=V_MIN+0.3 || (isUC && k*DS < LAUNCH_DIST)) ? 1 : act[k][nearestV(v)];
+    /* Near V_MIN or inside launch zone: always burn */
+    const burn = (v<=V_MIN+0.3 || k*DS < launchD) ? 1 : act[k][nearestV(v)];
     const r=stepDyn(v, burn?P_s:0, pt, M, wx);
     plan.push({s:k*DS, burn:!!burn, vT:v*3.6, cap:cap*3.6,
-               launch: isUC && k*DS < LAUNCH_DIST});
+               launch: k*DS < launchD});
     v=Math.min(r.v2,cap); t+=r.dt; e+=r.eH2;
   }
   return {plan, lapT:t, eH2:e};
 }
 
-function optimise(M, wx){
-  const target = lapTimeTarget;
+function optimise(M, wx, startV){
+  /* startV < 1 m/s → standing-start Lap 1: use 180 s target and launch zone.
+     startV ≥ 1 m/s (or omitted) → rolling lap: use 190 s target, no launch zone. */
+  const isStanding = (startV !== undefined && startV < 1.0);
+  const target = isStanding
+    ? (activeProfile.lapTimeTargetL1 || lapTimeTarget)
+    : lapTimeTarget;
   let lo=0, hi=4.0;
-  let best=solveDP(hi, M, wx);
+  let best=solveDP(hi, M, wx, startV);
   for(let it=0; it<16; it++){
-    const mid=(lo+hi)/2, r=solveDP(mid, M, wx);
+    const mid=(lo+hi)/2, r=solveDP(mid, M, wx, startV);
     if(r.lapT>target) lo=mid;
     else { hi=mid; best=r; }
   }
@@ -995,7 +900,7 @@ function buildRacePlan(){
    LIVE mode uses the same render paths — the simulator is not involved.
    Live source: in LIVE mode these frames come from MQTT instead.  */
 const state = {
-  mode:'demo', lap:1, s:0, v:27/3.6, t:0, eH2:0, eFC:0,
+  mode:'demo', lap:1, s:0, v:0.1, t:0, eH2:0, eFC:0,
   attempt:1, attemptT:0, attemptE:0,
   plan:null, lapLog:[], prevLog:null, laps:[], attempts:[],
   fcT:38, R:0, S:0, alerts:[],
@@ -1071,10 +976,16 @@ function simTick(dtSim){
   const p  = planAt(state.s);
   let P = 0, vNext;
   if(state.mode==='race'){
-    /* RACE PLAN: deterministic playback of the embedded optimum — follow the
-       plan's speed and FC set-point exactly (no driver noise, fixed weather). */
+    /* RACE PLAN: follow plan velocity exactly — stable, no drift.
+       Exception: below V_MIN (standing-start phase) the plan stores sub-25 km/h
+       vT values; replaying them directly causes a ~120 s crawl (plan[0].vT ≈ 0.36
+       km/h from rest → 600 ticks × 0.02 m = 12 m).  Use physics (stepDyn, grip-
+       capped at 1.3 m/s²) until the car climbs into the valid DP speed range,
+       then snap to plan velocity.  The transition gap is < 0.5 m/s. */
     P = p ? (p.burn ? (p.P||pCruise()) : 0) : 0;
-    vNext = p ? p.vT/3.6 : state.v;
+    vNext = (state.v < V_MIN)
+      ? Math.min(stepDyn(state.v, P, pt, TRUE, RACE_DAY_WX).v2, V_MAX)
+      : (p ? p.vT/3.6 : state.v);
   } else {
     const gust = {...WX, ms:WX.ms+(Math.random()-.5)*1.5};
     if(p){
@@ -1104,7 +1015,8 @@ function emitFrame(P){
   const f={
     A:+(state.v*3.6).toFixed(1),
     B: hrs>1e-4 ? +(distKm/hrs).toFixed(1) : 0,
-    C:li, D:fmtT(state.t), E:fmtT(lapTimeTarget),
+    C:li, D:fmtT(state.t),
+    E:fmtT(state.lap===1&&activeProfile.lapTimeTargetL1 ? activeProfile.lapTimeTargetL1 : lapTimeTarget),
     F:planAt(state.s)?+planAt(state.s).vT.toFixed(1):0,
     G:18.4, H:15.1, I:16.2,
     J:+(P/18.4).toFixed(2), K:0.4, L:+(P*0.85/16.2).toFixed(2),
@@ -1152,8 +1064,8 @@ function lapDone(){
   debrief(planE, e, t);
 
   if(state.mode==='race'){
-    /* RACE PLAN: keep replaying the same embedded optimum (no re-fit/replan) */
-    state.plan = buildRacePlan();
+    /* RACE PLAN: recompute at race-day conditions with carry-over speed (laps 2–11 rolling) */
+    state.plan = optimise(TRUE, RACE_DAY_WX, state.v);
     renderPlanChart(); renderStrip(); renderTrack(); renderLaps();
   } else {
     /* Live source (fit): swap fitModel() for a least-squares fit on the
@@ -1163,7 +1075,7 @@ function lapDone(){
     fitHistory.est.push(+EST.CdA.toFixed(4));
     fitHistory.true_.push(TRUE.CdA);
     if(WX.rain) addAlert('WET MODE — corner caps derated −25%', false, true);
-    state.plan = optimise(EST, WX);   // re-plan for lap N+1
+    state.plan = optimise(EST, WX, state.v);   // re-plan with carry-over speed
     renderPlanChart(); renderStrip(); renderTrack();
     renderLaps(); renderModel(); renderFitChart();
   }
@@ -1201,12 +1113,15 @@ function safeList(id, rows){
 }
 
 function debrief(planE, e, t){
-  const dE=(e-planE).toFixed(1), dT=(t-lapTimeTarget).toFixed(1);
+  /* Lap 1 has a different time target (standing start); laps 2–11 use lapTimeTarget */
+  const thisTarget = (state.lap===1 && activeProfile.lapTimeTargetL1)
+    ? activeProfile.lapTimeTargetL1 : lapTimeTarget;
+  const dE=(e-planE).toFixed(1), dT=(t-thisTarget).toFixed(1);
   const seg = TRACK.find(s=>s.type==='straight') || {name:'S1'};
   const losses = LOSS_TYPES.slice().sort(()=>Math.random()-.5).slice(0,2);
   const items=[
     `Lap ${state.lap}: ${e.toFixed(1)} Wh vs plan ${planE} Wh (Δ ${+dE>0?'+':''}${dE} Wh)`,
-    `Time ${fmtT(t)} vs target ${fmtT(lapTimeTarget)} (Δ ${+dT>0?'+':''}${dT} s)`,
+    `Time ${fmtT(t)} vs target ${fmtT(thisTarget)} (Δ ${+dT>0?'+':''}${dT} s)`,
     losses[0](seg.name),
     losses[1](seg.name)
   ];
@@ -1251,10 +1166,10 @@ function setMode(m){
        Use the Prototype profile, race-day conditions, and reset the run. */
     switchCar('thaiger7');
     WX={...RACE_DAY_WX}; _wxBase={...RACE_DAY_WX}; renderWx();
-    state.lap=1; state.s=0; state.t=0; state.eH2=0; state.eFC=0; state.v=27/3.6;
+    state.lap=1; state.s=0; state.t=0; state.eH2=0; state.eFC=0; state.v=0.1;
     state.attempt=1; state.attemptT=0; state.attemptE=0;
     state.laps=[]; state.attempts=[]; state.lapLog=[]; state.prevLog=null;
-    state.plan=buildRacePlan();
+    state.plan=optimise(TRUE, RACE_DAY_WX, 0.1);  // Lap 1: standing start, race-day conditions
     renderPlanChart(); renderStrip(); renderTrack(); renderElev();
     renderLaps(); renderAttemptHistory();
     setDot('on','Race plan'); startDemo();   // demo timer drives simTick (race branch)
@@ -1457,11 +1372,11 @@ function handleFrame(f){
   } else if(p){
     const lo=p.vT-1.5, hi=p.vT+1.5;
     spd.className = f.A<lo?'lo':(f.A>hi?'hi':'ok');
-    const span=38-18;
+    const span=38-25;   // bar spans V_MIN(25)–V_MAX(38) km/h
     const bt=document.getElementById('band-t');
-    bt.style.left=((lo-18)/span*100)+'%'; bt.style.width=((hi-lo)/span*100)+'%';
+    bt.style.left=((lo-25)/span*100)+'%'; bt.style.width=((hi-lo)/span*100)+'%';
     document.getElementById('band-v').style.left=
-      Math.max(0,Math.min(100,(f.A-18)/span*100))+'%';
+      Math.max(0,Math.min(100,(f.A-25)/span*100))+'%';
     cue(p);
   }
   if(state.plan){
@@ -1512,12 +1427,18 @@ function handleFrame(f){
 
 function cue(p){
   const act=document.getElementById('cue-act'), sub=document.getElementById('cue-sub');
-  let i=Math.floor(state.s/DS), j=i;
+  /* Clamp index — at s≈LAP_LEN, floor(s/DS) can equal plan.length and overflow */
+  let i=Math.min(Math.floor(state.s/DS), state.plan.plan.length-1), j=i;
   const cur=state.plan.plan[i]?.burn;
-  /* Urban Concept launch burst (first LAUNCH_DIST m after a stop) */
-  if(activeProfile.stopPerLap && p.launch){
+  /* Launch burst: UC after every stop; Prototype on Lap 1 from standing start */
+  if(p.launch){
     act.textContent='LAUNCH'; act.className='launch';
-    sub.textContent=`accelerate from stop → ${p.vT.toFixed(0)} km/h`;
+    if(activeProfile.stopPerLap){
+      sub.textContent=`accelerate from stop → ${p.vT.toFixed(0)} km/h`;
+    } else {
+      const lapT = activeProfile.lapTimeTargetL1 || 180;
+      sub.textContent=`standing start — target lap ${lapT} s`;
+    }
     return;
   }
   while(j<state.plan.plan.length && state.plan.plan[j].burn===cur) j++;
@@ -1825,7 +1746,7 @@ window.addEventListener('load',()=>{
   buildDictTable();
   renderWx();
   switchCar('thaiger7');
-  state.plan = optimise(EST, WX);
+  state.plan = optimise(EST, WX, 0.1);  // Lap 1: standing start from rest
   renderPlanChart(); renderStrip(); renderTrack(); renderModel(); renderElev();
   renderAttemptHistory();
   startDemo();
