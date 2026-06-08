@@ -669,7 +669,7 @@ function etaSys(P, M){
   const d=(P-M.Popt)/M.Popt;
   return Math.max(0.12, M.etaMax - 0.18*d*d);   // bell-shaped efficiency map
 }
-const V_MIN=20/3.6, V_MAX=38/3.6;
+const V_MIN=25/3.6, V_MAX=38/3.6;  // 25 km/h validity floor (Art. 226 / report eq. 2)
 
 /* Corner speed cap: v ≤ √(µ·g·r)  — rain derates µ (goal 3: rain & wind) */
 function vCap(pt, wx){
