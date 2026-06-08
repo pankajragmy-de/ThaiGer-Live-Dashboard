@@ -217,7 +217,7 @@
         <div class="kv"><span class="k">Car</span><span class="v" id="prof-name">THAIGER 7</span></div>
         <div class="kv"><span class="k">Category</span><span class="v" id="prof-cat">Prototype · H₂</span></div>
         <div class="kv"><span class="k">FC alarm</span><span class="v" id="prof-fc">70 °C</span></div>
-        <div class="kv"><span class="k">Min mass</span><span class="v" id="prof-m">95 kg total</span></div>
+        <div class="kv"><span class="k">Race mass</span><span class="v" id="prof-m">81 kg total</span></div>
         <div class="kv"><span class="k">Lap stop</span><span class="v" id="prof-stop" style="color:var(--faint)">No stop (Prototype)</span></div>
       </div>
     </div>
@@ -421,7 +421,7 @@ const PROFILES = {
     // then follows the same DP plan. Completes ~180 s (9 s faster than rolling
     // due to higher average speed during the run-up phase).
     lapTimeTargetL1: 180,
-    launchDistL1: 45,           // m — full-burn run-up zone from rest
+    launchDistL1: 40,           // m — full-burn run-up from rest (report §4: "first ≈40 m")
     // Lap 1 starts from rest; laps 2–11 carry over the finish-line speed
     startSpeedMS: 0.1           // m/s — standing start (effectively from rest)
   },
@@ -468,7 +468,7 @@ function switchCar(key){
   document.getElementById('prof-cat').textContent  = activeProfile.category;
   document.getElementById('prof-fc').textContent   = activeProfile.fcTempAlarm + ' °C';
   const totalKg = activeProfile.mass.car + activeProfile.mass.driverMin;
-  document.getElementById('prof-m').textContent   = totalKg + ' kg min';
+  document.getElementById('prof-m').textContent   = totalKg + ' kg total';
 
   // Show / hide stop rule indicator in profile card
   const stopEl = document.getElementById('prof-stop');
@@ -598,19 +598,11 @@ const LON_M=111319*Math.cos(REF_LAT*Math.PI/180), LAT_M=111000;
 const GPS_RAW_LEN = SILESIA_GPS.reduce((a,s)=>a+s[3],0);
 const GPS_SCALE   = OFFICIAL_LAP_M / GPS_RAW_LEN;
 
-/* 
-   REAL ELEVATION + RACE-PLAN PLAYBACK  (Silesia Ring, ThaiGer 7 @ 81 kg)
-   
-   SILESIA_ELEV/GRADE: real elevation (Open-Meteo, 202–206 m, flat) and the
-   per-segment gradient it implies — fed into the physics (Eq.1, grade term).
-   RACE_PLAN_DATA: the computed race-day OPTIMUM trajectory (per 12 m step:
-   distance, plan speed km/h, burn flag, FC set-point W). RACE PLAN mode plays
-   this back deterministically so you can watch the strategy respond to every
-   corner (grip cap) and the terrain. Model: m=81 kg, lap 178.5 s,
-   4.67 Wh/lap, ~853 km/m³.                              */
+/* Real elevation + grade from Open-Meteo terrain data (Silesia Ring, ~202–206 m,
+   effectively flat: < 0.05% average grade, max ±1.66% per 12 m step).
+   Fed into the physics as the grade term of Eq.1 (report §3).               */
 const SILESIA_ELEV = [204.4,204.6,204.8,205.0,205.0,205.0,205.0,205.0,205.0,205.0,205.2,205.2,205.2,205.2,205.2,205.0,205.0,205.0,205.0,205.0,205.0,205.0,205.0,204.8,204.6,204.4,204.2,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,204.0,203.8,203.6,203.4,203.2,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,202.8,202.6,202.4,202.2,202.0,202.0,202.0,202.0,202.0,202.0,202.0,202.2,202.4,202.6,202.8,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.0,203.2,203.4,203.6,203.8,204.0,204.0,204.0,204.0,204.2];
 const SILESIA_GRADE = [1.66,1.66,1.66,0.0,0.0,0.0,0.0,0.0,0.0,1.66,0.0,0.0,0.0,0.0,-1.66,0.0,0.0,0.0,0.0,0.0,0.0,0.0,-1.66,-1.66,-1.66,-1.66,-1.66,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,-1.66,-1.66,-1.66,-1.66,-1.66,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,-1.66,-1.66,-1.66,-1.66,-1.66,0.0,0.0,0.0,0.0,0.0,0.0,1.66,1.66,1.66,1.66,1.66,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.66,1.66,1.66,1.66,1.66,0.0,0.0,0.0,1.66,1.52];
-const RACE_PLAN_DATA = [[0,25.15,0,0],[12,24.87,1,150],[24,26.13,0,0],[36,25.86,0,0],[48,25.59,0,0],[60,25.32,0,0],[72,25.05,0,0],[84,24.77,0,0],[96,24.5,0,0],[108,24.21,0,0],[120,23.91,1,150],[132,25.25,1,150],[144,26.41,1,150],[156,27.43,0,0],[168,27.04,0,0],[180,26.63,0,0],[192,26.16,0,0],[204,25.67,0,0],[216,25.19,0,0],[228,24.7,0,0],[240,24.21,0,0],[252,23.7,0,0],[264,23.19,0,0],[276,22.68,1,150],[288,24.0,1,150],[300,25.15,1,150],[312,26.16,1,150],[324,27.06,1,150],[336,27.89,0,0],[348,27.4,0,0],[360,26.92,0,0],[372,26.43,0,0],[384,25.94,0,0],[396,25.45,0,0],[408,24.96,0,0],[420,24.46,0,0],[432,23.96,0,0],[444,23.49,0,0],[456,23.02,1,150],[468,24.31,0,0],[480,23.8,0,0],[492,23.3,1,150],[504,24.53,1,150],[516,25.62,1,150],[528,26.58,1,150],[540,27.46,0,0],[552,26.98,0,0],[564,26.5,0,0],[576,26.01,0,0],[588,25.52,0,0],[600,25.03,0,0],[612,24.54,0,0],[624,24.04,0,0],[636,23.53,0,0],[648,23.02,1,150],[660,24.3,1,150],[672,25.42,1,150],[684,26.43,0,0],[696,25.99,0,0],[708,25.59,0,0],[720,25.22,0,0],[732,24.87,0,0],[744,24.54,0,0],[756,24.21,0,0],[768,23.88,1,150],[780,25.2,1,150],[792,26.36,1,150],[804,27.41,0,0],[816,27.09,0,0],[828,26.77,0,0],[840,26.45,0,0],[852,26.12,0,0],[864,25.82,0,0],[876,25.54,0,0],[888,25.27,0,0],[900,25.01,0,0],[912,24.73,0,0],[924,24.45,0,0],[936,24.16,0,0],[948,23.87,0,0],[960,23.58,0,0],[972,23.29,0,0],[984,22.99,1,150],[996,24.47,1,150],[1008,25.76,1,150],[1020,26.9,1,150],[1032,27.95,0,0],[1044,27.69,0,0],[1056,27.43,0,0],[1068,27.18,0,0],[1080,26.91,0,0],[1092,26.63,0,0],[1104,26.33,0,0],[1116,26.02,0,0],[1128,25.7,0,0],[1140,25.38,0,0],[1152,25.07,0,0],[1164,24.79,0,0],[1176,24.52,0,0],[1188,24.25,0,0],[1200,23.97,0,0],[1212,23.69,0,0],[1224,23.4,0,0],[1236,23.12,1,150],[1248,24.59,0,0],[1260,24.31,0,0],[1272,24.03,0,0],[1284,23.75,0,0],[1296,23.47,0,0],[1308,23.18,1,150]];   // [s_m, v_kmh, burn, P_W] per 12 m step
 
 
 /* PTS — per-point screen coords, heading, curvature for physics & render */
@@ -655,8 +647,13 @@ const CORNER_S_FRAC  = [0.109, 0.318, 0.345, 0.518, 0.645, 0.782, 0.873];
    Both are seeded from the active profile's physics block in switchCar().
    Live source (vehicle): paste your coast-down fit values into the profile
    physics blocks above; switchCar() propagates them here automatically.  */
-const TRUE = { m:95,  CdA:0.045, Crr:0.0025, etaDrive:0.87, Popt:160, etaMax:0.40 };
-let   EST  = { m:95,  CdA:0.062, Crr:0.0035, etaDrive:0.87, Popt:160, etaMax:0.37 };
+/* TRUE — calibrated 2026 model (report §3, eq.1 parameters).
+   Seeded here to match report values; switchCar() overwrites from the active
+   profile so these are always the authoritative source.
+   EST — optimiser's current estimate (starts ~26-30 % conservative), converges
+   each lap via coast-down identification.                                       */
+const TRUE = { m:81,  CdA:0.050, Crr:0.0040, etaDrive:0.93, Popt:150, etaMax:0.60 };
+let   EST  = { m:81,  CdA:0.063, Crr:0.0052, etaDrive:0.93, Popt:150, etaMax:0.564 };
 const G=9.81, LHV_WH_PER_L=3.0;   // H₂ LHV ≈ 3.0 Wh/Nl
 /* Air density from real pressure (hPa) + temperature °C: ρ = p/(R·T)
    Uses actual Open-Meteo surface pressure when available, else std atm. */
@@ -764,10 +761,10 @@ function wxStep(){
 
 /* 6 · STRATEGY ENGINE
    Lap time target is profile-dependent (set by switchCar):
-   • ThaiGer  (Prototype):      lapTimeTarget = 190 s  (2026 pace-optimised; 13 s margin)
+   • ThaiGer  (Prototype):      lapTimeTarget = 190 s  (2026 pace-optimised; +29 s margin)
      → no stop overhead, pure driving budget.
-   • Bengalo  (Urban Concept):  lapTimeTarget = 166 s
-     → budget = 190.9 s − stop cycle overhead (~25 s: decel+hold+accel)
+   • Bengalo  (Urban Concept):  lapTimeTarget = 162 s
+     → budget = 190.9 s − stop cycle overhead (~29 s: decel+hold+accel)
      → DP plans driving phase only; stop time is added in simulation.
    Both run the same DP algorithm; Bengalo also uses startSpeedMS = 0.  */
 const DS = 12;
@@ -820,7 +817,7 @@ function solveDP(lambda, M, wx, startV){
            : (isUC ? 0.1 : 27/3.6);
   /* Launch zone: UC stop-recovery zone; Prototype only when starting from rest (Lap 1) */
   const launchD = isUC ? LAUNCH_DIST
-                : (v0 < 1.0 ? (activeProfile.launchDistL1 || 45) : 0);
+                : (v0 < 1.0 ? (activeProfile.launchDistL1 || 40) : 0);
 
   for(let k=NSTEP-1;k>=0;k--){
     const pt=ptAt(k*DS), cap=vCap(pt,wx);
@@ -878,21 +875,7 @@ function optimise(M, wx, startV){
 const RACE_DAY_WX = { ms:3.7, dirDeg:280, tempC:24, rain:false,
                       pressure:990, source:'Race-day model (24–28 Jun)' };
 
-/* Build the embedded 81 kg race-day OPTIMUM into a plan object (same shape
-   as optimise()): RACE_PLAN_DATA = [s_m, v_kmh, burn(0/1), P_W] per step.
-   Corner caps are recomputed locally so the plan strip/chart show them.   */
-function buildRacePlan(){
-  const steps = RACE_PLAN_DATA.map(r => ({
-    s:r[0], vT:r[1], burn:r[2]===1, P:r[3],
-    cap:vCap(ptAt(r[0]), RACE_DAY_WX)*3.6
-  }));
-  let eH2=0;
-  for(const st of steps){ if(st.burn) eH2 += st.P*(DS/Math.max(st.vT/3.6,1))/3600/etaSys(Math.max(st.P,60),TRUE); }
-  return { plan:steps, lapT:lapTimeTarget, eH2,
-           version:(state.plan?state.plan.version:0)+1 };
-}
-
-/* 
+/*
    7 · DEMO LAP SIMULATOR
    
    Drives the TRUE car along the current plan, emitting JSON frames in
@@ -1019,12 +1002,12 @@ function emitFrame(P){
     E:fmtT(state.lap===1&&activeProfile.lapTimeTargetL1 ? activeProfile.lapTimeTargetL1 : lapTimeTarget),
     F:planAt(state.s)?+planAt(state.s).vT.toFixed(1):0,
     G:18.4, H:15.1, I:16.2,
-    J:+(P/18.4).toFixed(2), K:0.4, L:+(P*0.85/16.2).toFixed(2),
+    J:+(P/18.4).toFixed(2), K:0.4, L:+(P*TRUE.etaDrive/16.2).toFixed(2),
     M:0.32, N:+state.fcT.toFixed(1), O:Math.round(30+P/8),
     P:cuePct(), Q:Math.round(12+Math.random()*10),
     R:Math.round(state.R), S:Math.round(state.S),
-    T:Math.round(etaSys(Math.max(P,60),TRUE)*100),
-    U:Math.round(etaSys(Math.max(P,60),TRUE)*85)
+    T:Math.round(etaSys(Math.max(P,60),TRUE)*100),          // FC η: H₂→electrical
+    U:Math.round(etaSys(Math.max(P,60),TRUE)*TRUE.etaDrive*100) // System η: H₂→wheel
   };
   handleFrame(f);
 }
