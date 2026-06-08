@@ -1064,8 +1064,14 @@ function lapDone(){
   debrief(planE, e, t);
 
   if(state.mode==='race'){
-    /* RACE PLAN: recompute at race-day conditions with carry-over speed (laps 2–11 rolling) */
-    state.plan = optimise(TRUE, RACE_DAY_WX, state.v);
+    /* RACE PLAN: use pre-computed plan — zero computation at lap boundary.
+       racePlans[0] = Lap 1 (standing-start); [1]…[10] = Laps 2–11 rolling.
+       When an attempt ends (lap 11 done, li=11), state.lap%11=0 → index 0
+       restarts the standing-start plan for the next attempt.
+       Also reset carry-over speed to rest so the Lap 1 plan's launch phase
+       fires correctly on the first tick of the new attempt.               */
+    if(li===LAPS_PER_ATTEMPT) state.v = 0.1;   // reset for new attempt standing start
+    state.plan = state.racePlans[state.lap % LAPS_PER_ATTEMPT];
     renderPlanChart(); renderStrip(); renderTrack(); renderLaps();
   } else {
     /* Live source (fit): swap fitModel() for a least-squares fit on the
@@ -1169,7 +1175,20 @@ function setMode(m){
     state.lap=1; state.s=0; state.t=0; state.eH2=0; state.eFC=0; state.v=0.1;
     state.attempt=1; state.attemptT=0; state.attemptE=0;
     state.laps=[]; state.attempts=[]; state.lapLog=[]; state.prevLog=null;
-    state.plan=optimise(TRUE, RACE_DAY_WX, 0.1);  // Lap 1: standing start, race-day conditions
+    /* Pre-compute ALL 11 lap plans upfront so lap-boundary transitions are
+       instantaneous (zero computation on the setInterval thread).
+       Carry-over chain: each lap's plan feeds the next lap's starting speed
+       (in RACE mode the sim replays plan velocities, so the finish-line speed
+       is deterministically plan[NSTEP-1].vT / 3.6).                          */
+    state.racePlans = [];
+    let vC = 0.1;  // Lap 1 standing start
+    for(let lap=0; lap<LAPS_PER_ATTEMPT; lap++){
+      const p = optimise(TRUE, RACE_DAY_WX, vC);
+      state.racePlans.push(p);
+      /* Predict carry-over: RACE sim replays p.vT above V_MIN exactly */
+      vC = p.plan[p.plan.length-1].vT / 3.6;
+    }
+    state.plan = state.racePlans[0];
     renderPlanChart(); renderStrip(); renderTrack(); renderElev();
     renderLaps(); renderAttemptHistory();
     setDot('on','Race plan'); startDemo();   // demo timer drives simTick (race branch)
