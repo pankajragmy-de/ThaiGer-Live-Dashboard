@@ -1676,18 +1676,34 @@ function toggle(bodyId, toggleId){
 /* 
    13 · BOOT
     */
-let demoTimer=null;
+let demoTimer=null, _lastTick=null;
+/* When the tab returns to the foreground, restart the wall-clock delta so a long
+   hidden/paused gap doesn't fast-forward the pointer (it resumes cleanly instead). */
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) _lastTick=null; });
 function startDemo(){
   setDot('on','Prototype');
   if(demoTimer) return;
+  _lastTick=null;
+  /* Advance the sim by REAL elapsed wall-clock time (not a fixed step), so the
+     pointer is a true-to-life illustration: in RACE PLAN mode the car completes
+     one revolution in exactly the lap time (e.g. a ~188 s lap takes 188 s on the
+     wall clock). This is immune to canvas-render overhead and browser timer
+     clamping that previously made the pointer lag. DEMO mode runs 6× for a quick
+     preview. The 70 ms tick keeps the marker motion smooth (~14 fps). */
   demoTimer=setInterval(()=>{
-    const sub = state.mode==='race' ? 1 : 6;   // race=1:1 real-time (cues readable); demo=6× for quick overview
-    for(let i=0;i<sub;i++) simTick(0.2);
-    if(Math.random()<0.05) wxStep();
-    renderStrip(); renderElev();                // move the position markers smoothly
-  }, 200);
+    const now = performance.now();
+    let realDt = _lastTick==null ? 0.07 : (now-_lastTick)/1000;   // seconds since last tick
+    _lastTick = now;
+    realDt = Math.min(realDt, 2.0);                               // safety cap for pathological gaps only
+    const speed = state.mode==='race' ? 1 : 6;                    // race = 1:1 real-time; demo = 6×
+    const simDt = realDt * speed;
+    const n = Math.max(1, Math.ceil(simDt/0.1));                  // sub-step ≤0.1 s for physics stability
+    for(let i=0;i<n;i++) simTick(simDt/n);
+    if(Math.random() < simDt*0.25) wxStep();                      // weather drift per sim-second
+    renderStrip(); renderElev();                                  // move the position markers smoothly
+  }, 70);
 }
-function stopDemo(){ clearInterval(demoTimer); demoTimer=null; }
+function stopDemo(){ clearInterval(demoTimer); demoTimer=null; _lastTick=null; }
 
 function initCharts(){
   if(typeof Chart==='undefined'){
