@@ -168,7 +168,7 @@
       <span id="wx-wind">—</span><span id="wx-dir">—</span>
       <span id="wx-temp">—°C</span><span id="wx-rain"></span>
       <span id="wx-src" style="color:var(--amber);font-size:10px;font-family:var(--mono)">◎ loading…</span>
-      <span style="color:var(--faint)">11 laps · 35:00 · 14.6 km (Art. 226)</span>
+      <span style="color:var(--faint)">11 laps · 35:00 · 14.6 km</span>
       <span id="lapclock" style="color:var(--dim)">A1 · L0/11 · 0:00/35:00</span>
     </div>
     <button id="gear" onclick="openOvl()">⚙</button>
@@ -283,10 +283,10 @@
         <div class="note">
           Green = measured value · Blue = model estimate, refined each lap.
           <br><br>
-          Rules calibration (Poland 2026 Chapter II): 11 laps / 35 min / 14.6 km (Art. 226) ·
-          7-turn circuit (Art. 231) · 6 attempts (Art. 228).
+          Rules calibration (Poland 2026): 11 laps / 35 min / 14.6 km ·
+          7-turn circuit · 6 attempts.
           <b>Prototype (ThaiGer):</b> no stop, rolling laps, driver ≥ 50 kg incl. gear.
-          <b>Urban Concept (Bengalo):</b> mandatory full stop every lap (Art. 227),
+          <b>Urban Concept (Bengalo):</b> mandatory full stop every lap,
           launch from rest, driver ≥ 70 kg incl. gear. Weather is fetched live (Open-Meteo) for the venue.
         </div>
       </div>
@@ -414,12 +414,12 @@ const PROFILES = {
     },
     // FC burn set-points (same power for cruise and standing-start run-up)
     pCruise:150, pLaunch:150,  // Popt = 150 W (peak eta_sys)
-    // Rolling laps 2–11: 190 s = 25.1 km/h; 11-lap total ≈ 2071 s → +29 s margin
+    // Rolling laps 2–11: 190 s target (Art. 226 lap-AVERAGE ≥25 km/h); with the 24.5 km/h
+    // tight band the bisection lands the slowest stable lap at ~188 s, avg ~25.5 km/h.
     lapTimeTarget: 190,
-    // Lap 1 standing start: car burns continuously ~45 m from rest until pace speed,
-    // then follows the same DP plan. Completes ~180 s (9 s faster than rolling
-    // due to higher average speed during the run-up phase).
-    lapTimeTargetL1: 180,
+    // Lap 1 standing start: 178 s target, tighter than rolling, so Lap 1 finishes on the
+    // 24.5 km/h band floor and seeds rolling laps 2–11 in the optimal carry-over state.
+    lapTimeTargetL1: 178,
     launchDistL1: 40,           // m — full-burn run-up from rest (report §4: "first ≈40 m")
     // Lap 1 starts from rest; laps 2–11 carry over the finish-line speed
     startSpeedMS: 0.1           // m/s — standing start (effectively from rest)
@@ -658,7 +658,13 @@ function etaSys(P, M){
   const d=(P-M.Popt)/M.Popt;
   return Math.max(0.12, M.etaMax - 0.18*d*d);   // bell-shaped efficiency map
 }
-const V_MIN=25/3.6, V_MAX=38/3.6;  // 25 km/h validity floor (Art. 226 / report eq. 2)
+const V_MIN=25/3.6, V_MAX=38/3.6;  // 25 km/h Art.226 AVERAGE floor (display/validation); 38 km/h cap
+// Tight-band operating point shifted just BELOW 25 km/h: the burn-coast band floor is
+// 24.5 km/h, so laps run ~188 s and AVERAGE ~25.5 km/h (Art.226-valid, ~0.5 km/h buffer)
+// instead of the old 184 s / avg 26.0 km/h band — same low H₂, far smaller attempt margin.
+const V_GRID_MIN=24.5/3.6;          // DP grid base = band floor (also the carry-over floor)
+const V_FORCE  =24.5/3.6;           // forward-pass force-burn floor (tight-band base)
+const V_REJECT =22/3.6;             // backward-DP transition reject floor
 
 /* Corner speed cap: v ≤ √(µ·g·r)  — rain derates µ (goal 3: rain & wind) */
 function vCap(pt, wx){
@@ -762,7 +768,7 @@ function wxStep(){
 const DS = 12;
 const NSTEP = Math.floor(LAP_LEN/DS);
 const VGRID = [];
-for(let v=V_MIN; v<=V_MAX+1e-9; v+=0.5/3.6) VGRID.push(v);
+for(let v=V_GRID_MIN; v<=V_MAX+1e-9; v+=0.25/3.6) VGRID.push(v);  // 24.5–38 km/h, 0.25 step
 /* Burn set-points are profile-specific (activeProfile.pCruise / pLaunch).
    Urban Concept uses a higher launch burst for the first LAUNCH_DIST m to
    recover pace after its mandatory stop; Prototype uses one gentle burn.  */
@@ -819,7 +825,7 @@ function solveDP(lambda, M, wx, startV){
       const v=VGRID[i]; if(v>cap+1e-6){Jn[i]=INF;continue;}
       for(const burn of [1,0]){
         const r=stepDyn(v, burn?P_s:0, pt, M, wx);
-        if(r.v2<V_MIN-0.6) continue;
+        if(r.v2<V_REJECT) continue;  // reject transitions below 22 km/h (safety)
         const j=nearestV(Math.min(r.v2,cap));
         const c=r.eH2 + lambda*r.dt + (J[j]>=INF?INF:J[j]);
         if(c<Jn[i]){Jn[i]=c; An[i]=burn; Pn[i]=P_s;}
@@ -834,8 +840,7 @@ function solveDP(lambda, M, wx, startV){
     const pt=ptAt(k*DS), cap=vCap(pt,wx);
     const P_s = k*DS < launchD ? pLaunch() : pCruise();
     v=Math.min(v,cap);
-    /* Near V_MIN or inside launch zone: always burn */
-    const burn = (v<=V_MIN+0.3 || k*DS < launchD) ? 1 : act[k][nearestV(v)];
+    const burn = (k*DS < launchD || v < V_FORCE) ? 1 : act[k][nearestV(v)];
     const r=stepDyn(v, burn?P_s:0, pt, M, wx);
     plan.push({s:k*DS, burn:!!burn, vT:v*3.6, cap:cap*3.6,
                launch: k*DS < launchD});
@@ -845,7 +850,7 @@ function solveDP(lambda, M, wx, startV){
 }
 
 function optimise(M, wx, startV){
-  /* startV < 1 m/s → standing-start Lap 1: use 180 s target and launch zone.
+  /* startV < 1 m/s → standing-start Lap 1: use lapTimeTargetL1 (180 s) + launch zone.
      startV ≥ 1 m/s (or omitted) → rolling lap: use 190 s target, no launch zone. */
   const isStanding = (startV !== undefined && startV < 1.0);
   const target = isStanding
@@ -926,7 +931,7 @@ function simTick(dtSim){
         state.s = stopZoneStart;
         state.stopPhase = 'stopped';
         state.stopTimer = stopSecs;
-        addAlert(`FULL STOP — ${stopSecs} s · Art. 227 (Urban Concept)`, false, true);
+        addAlert(`FULL STOP — ${stopSecs} s (Urban Concept)`, false, true);
       }
       return;
     }
@@ -952,13 +957,13 @@ function simTick(dtSim){
   let P = 0, vNext;
   if(state.mode==='race'){
     /* RACE PLAN: follow plan velocity exactly — stable, no drift.
-       Exception: below V_MIN (standing-start phase) the plan stores sub-25 km/h
-       vT values; replaying them directly causes a ~120 s crawl (plan[0].vT ≈ 0.36
-       km/h from rest → 600 ticks × 0.02 m = 12 m).  Use physics (stepDyn, grip-
-       capped at 1.3 m/s²) until the car climbs into the valid DP speed range,
-       then snap to plan velocity.  The transition gap is < 0.5 m/s. */
+       Exception: ONLY the standing-start build-up (car still below the band floor,
+       < V_REJECT = 22 km/h) uses live physics until it reaches pace, then snaps to
+       the plan. Rolling-lap coast dips bottom out at ~23.3 km/h — above this floor —
+       so laps 2–11 follow the plan smoothly (no live-physics stutter). Art.226 is
+       satisfied on the lap AVERAGE (~25.5 km/h), not each step. */
     P = p ? (p.burn ? (p.P||pCruise()) : 0) : 0;
-    vNext = (state.v < V_MIN)
+    vNext = (state.v < V_REJECT)
       ? Math.min(stepDyn(state.v, P, pt, TRUE, RACE_DAY_WX).v2, V_MAX)
       : (p ? p.vT/3.6 : state.v);
   } else {
@@ -1160,7 +1165,8 @@ function setMode(m){
     for(let lap=0; lap<LAPS_PER_ATTEMPT; lap++){
       const p = optimise(TRUE, RACE_DAY_WX, vC);
       state.racePlans.push(p);
-      /* Predict carry-over: RACE sim replays p.vT above V_MIN exactly */
+      /* Predict carry-over: true carry-over (no clip) — next lap starts at this lap's
+         finish speed (~24 km/h on the band floor), which the race sim replays exactly */
       vC = p.plan[p.plan.length-1].vT / 3.6;
     }
     state.plan = state.racePlans[0];
@@ -1231,7 +1237,7 @@ function setDot(c,l){
    10 · DATA DICTIONARY — 21 channels A–U */
 const DICT = [
   {k:'A',name:'Speed',          unit:'km/h', alarm:null,    goal:'2',  desc:'Instantaneous wheel speed'},
-  {k:'B',name:'Avg speed',      unit:'km/h', alarm:'<25.1', goal:'2',  desc:'Attempt average (Art. 226)'},
+  {k:'B',name:'Avg speed',      unit:'km/h', alarm:'<25.1', goal:'2',  desc:'Attempt average'},
   {k:'C',name:'Lap count',      unit:'—',    alarm:null,    goal:'2',  desc:'Lap boundary signal'},
   {k:'D',name:'Total time',     unit:'mm:ss',alarm:null,    goal:'2',  desc:'Elapsed time this attempt'},
   {k:'E',name:'Target lap time',unit:'mm:ss',alarm:null,    goal:'2',  desc:'Strategy output (plan target)'},
@@ -1356,7 +1362,7 @@ function handleFrame(f){
     const act=document.getElementById('cue-act'), sub=document.getElementById('cue-sub');
     if(state.stopPhase==='braking'){
       act.textContent='BRAKE'; act.className='stop';
-      sub.textContent=`full stop ahead — Art. 227 (${(LAP_LEN-state.s)|0} m)`;
+      sub.textContent=`full stop ahead (${(LAP_LEN-state.s)|0} m)`;
       spd.className='hi';
     } else {
       act.textContent='STOP'; act.className='stop';
@@ -1570,7 +1576,7 @@ function renderTrack(){
     inner+=`<circle cx="${sp.x}" cy="${sp.y}" r="9" fill="none"
       stroke="#FF3B3B" stroke-width="2.5"/>`;
     inner+=`<text x="${sp.x+11}" y="${sp.y+3}" fill="#FF3B3B"
-      font-size="8" font-family="JetBrains Mono">STOP (Art.227)</text>`;
+      font-size="8" font-family="JetBrains Mono">STOP</text>`;
   }
   /* Moving car dot */
   inner+=`<circle id="car" r="6" fill="#E8EDF2" stroke="${activeProfile.color}" stroke-width="2.5"/>`;
@@ -1675,7 +1681,7 @@ function startDemo(){
   setDot('on','Prototype');
   if(demoTimer) return;
   demoTimer=setInterval(()=>{
-    const sub = state.mode==='race' ? 4 : 6;   // race plays a touch slower to watch
+    const sub = state.mode==='race' ? 1 : 6;   // race=1:1 real-time (cues readable); demo=6× for quick overview
     for(let i=0;i<sub;i++) simTick(0.2);
     if(Math.random()<0.05) wxStep();
     renderStrip(); renderElev();                // move the position markers smoothly
