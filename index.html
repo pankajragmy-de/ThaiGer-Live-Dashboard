@@ -163,7 +163,7 @@
     <button class="pill car-t7 active" id="car-t7" onclick="switchCar('thaiger7')">THAIGER 7</button>
     <button class="pill car-bg" id="car-bg" onclick="switchCar('bengalo')">BENGALO</button>
     <div class="tb-sep"></div>
-    <div id="conn"><div class="dot" id="dot"></div><span id="conn-l">Demo</span></div>
+    <div id="conn"><div class="dot" id="dot"></div><span id="conn-l">Prototype</span></div>
     <div id="wx">
       <span id="wx-wind">—</span><span id="wx-dir">—</span>
       <span id="wx-temp">—°C</span><span id="wx-rain"></span>
@@ -218,7 +218,6 @@
         <div class="kv"><span class="k">Category</span><span class="v" id="prof-cat">Prototype · H₂</span></div>
         <div class="kv"><span class="k">FC alarm</span><span class="v" id="prof-fc">70 °C</span></div>
         <div class="kv"><span class="k">Race mass</span><span class="v" id="prof-m">81 kg total</span></div>
-        <div class="kv"><span class="k">Lap stop</span><span class="v" id="prof-stop" style="color:var(--faint)">No stop (Prototype)</span></div>
       </div>
     </div>
 
@@ -470,13 +469,6 @@ function switchCar(key){
   const totalKg = activeProfile.mass.car + activeProfile.mass.driverMin;
   document.getElementById('prof-m').textContent   = totalKg + ' kg total';
 
-  // Show / hide stop rule indicator in profile card
-  const stopEl = document.getElementById('prof-stop');
-  if(stopEl){
-    stopEl.textContent = activeProfile.stopPerLap
-      ? `STOP / LAP (Art. 227)` : `No stop (Prototype)`;
-    stopEl.style.color = activeProfile.stopPerLap ? 'var(--amber)' : 'var(--faint)';
-  }
 
   // Update vehicle physics
   const ph = activeProfile.physics;
@@ -1680,7 +1672,7 @@ function toggle(bodyId, toggleId){
     */
 let demoTimer=null;
 function startDemo(){
-  setDot('on','Demo');
+  setDot('on','Prototype');
   if(demoTimer) return;
   demoTimer=setInterval(()=>{
     const sub = state.mode==='race' ? 4 : 6;   // race plays a touch slower to watch
