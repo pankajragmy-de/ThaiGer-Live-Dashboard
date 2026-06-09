@@ -1580,12 +1580,6 @@ function renderTrack(){
     inner+=`<text x="${sp.x+11}" y="${sp.y+3}" fill="#FF3B3B"
       font-size="8" font-family="JetBrains Mono">STOP (Art.227)</text>`;
   }
-  /* Track info label — category specific */
-  const lbl = activeProfile.stopPerLap
-    ? `SILESIA RING (Art.231) · ${Math.round(LAP_LEN)} m/lap · URBAN CONCEPT: full stop/lap · launch=bright green`
-    : `SILESIA RING (Art.231) · ${Math.round(LAP_LEN)} m/lap · PROTOTYPE: no stop · green=BURN amber=COAST`;
-  inner+=`<text x="${mx[0]}" y="${my[0]-8}" fill="#3D4F60"
-    font-size="8" font-family="JetBrains Mono">${lbl}</text>`;
   /* Moving car dot */
   inner+=`<circle id="car" r="6" fill="#E8EDF2" stroke="${activeProfile.color}" stroke-width="2.5"/>`;
   svg.innerHTML=inner;
